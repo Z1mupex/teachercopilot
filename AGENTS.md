@@ -45,7 +45,7 @@ This block is written and re-added by `next dev` — verify at `node_modules/nex
 - Run npm run lint, npm run typecheck and npm run build after changes.
 - Complete only the prompt explicitly authorized by the user. Prompt 0 establishes
   the foundation; auth/application shell belong to prompt 1, schema/RLS to prompt 2.
-- Prompts 0–14 are implemented. Class/worksheet CRUD and real dashboard queries run server-side
+- Class/worksheet CRUD and real dashboard queries run server-side
   on the connected Supabase project. Mutations derive teacher_id from requireUser(),
   filter by ownership, validate with Zod, and revalidate classes/detail/dashboard.
 - Supabase clients use generated Database types from src/types/database.ts.
