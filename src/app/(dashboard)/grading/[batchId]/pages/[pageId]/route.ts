@@ -4,6 +4,7 @@ import { getBatch, GradingError, ownedPage } from "@/lib/grading/repository";
 import { storePage } from "@/lib/grading/page-storage";
 import { idSchema, MAX_UPLOAD_BYTES } from "@/lib/grading/validation";
 import sharp from "sharp";
+import { removedImageResponse } from "@/lib/grading/removed-image";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -39,6 +40,7 @@ export async function GET(request: Request, { params }: Context) {
     return new Response(null, { status: 404, headers });
   try {
     const { client, page } = await ownedPage(user.id, batchId, pageId);
+    if (page.removed_submission_images) return removedImageResponse(headers);
     if (page.upload_status !== "stored")
       throw new GradingError("Страница ещё не загружена.", 404);
     const { data, error } = await client.storage

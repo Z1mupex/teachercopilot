@@ -190,7 +190,7 @@ export async function ownedPage(
   const { data: page, error } = await client
     .from("submission_pages")
     .select(
-      "id,storage_path,upload_status,width,height,submissions!inner(batch_id)",
+      "id,storage_path,upload_status,width,height,removed_submission_images(page_id),submissions!inner(batch_id)",
     )
     .eq("id", pageId)
     .eq("submissions.batch_id", batchId)

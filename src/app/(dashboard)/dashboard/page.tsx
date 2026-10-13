@@ -9,7 +9,7 @@ import {
 } from "lucide-react";
 
 import { DashboardOverview } from "@/components/dashboard/overview";
-import { getDisplayName } from "@/lib/auth/profile";
+import { getTeacherSettings } from "@/lib/settings/repository";
 import { requireUser } from "@/lib/auth/session";
 import { getDashboardData } from "@/lib/dashboard/queries";
 
@@ -47,7 +47,8 @@ const quickActions = [
 
 export default async function DashboardPage() {
   const user = await requireUser("/dashboard");
-  const name = getDisplayName(user);
+  const { settings } = await getTeacherSettings(user.id);
+  const name = settings.full_name;
   const data = await getDashboardData(user.id);
   return (
     <div className="space-y-8">

@@ -8,6 +8,9 @@ import {
 } from "@/lib/grading/analytics-repository";
 import { BatchAnalytics } from "@/components/grading/batch-analytics";
 import { isAiConfigured } from "@/lib/env";
+import { getBatchConversion } from "@/lib/settings/repository";
+import { percentageGrade } from "@/lib/settings/schema";
+import { BatchGradeConversion } from "@/components/settings/batch-grade-conversion";
 export const metadata = { title: "Результаты проверки — Teacher Copilot" };
 export default async function Page({
   params,
@@ -31,6 +34,7 @@ export default async function Page({
   )
     notFound();
   const progress = detail.batch;
+  const grading = await getBatchConversion(user.id, batchId);
   return (
     <div className="space-y-6">
       <div>
@@ -51,6 +55,13 @@ export default async function Page({
         </p>
       ) : (
         <>
+          <BatchGradeConversion
+            batchId={batchId}
+            initial={grading.conversion}
+            initialRevision={grading.revision}
+            foScale={grading.foScale}
+            controlScale={grading.controlScale}
+          />
           {detail.analytics && (
             <BatchAnalytics
               analytics={detail.analytics}
@@ -73,6 +84,10 @@ export default async function Page({
                   <th className="p-4">Баллы</th>
                   <th className="p-4">Максимум</th>
                   <th className="p-4">Результат</th>
+                  <th className="p-4">
+                    Оценка ·{" "}
+                    {grading.conversion.kind === "fo" ? "ФО" : "СОР / СОЧ"}
+                  </th>
                 </tr>
               </thead>
               <tbody>
@@ -88,6 +103,13 @@ export default async function Page({
                       {s.finalScore !== null && s.maxScore && s.maxScore > 0
                         ? `${Math.round((s.finalScore / s.maxScore) * 10000) / 100}%`
                         : "—"}
+                    </td>
+                    <td className="p-4 tabular-nums">
+                      {percentageGrade(
+                        s.finalScore,
+                        s.maxScore,
+                        grading.conversion.scale,
+                      ) ?? "—"}
                     </td>
                   </tr>
                 ))}

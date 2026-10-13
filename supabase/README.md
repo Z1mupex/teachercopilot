@@ -16,6 +16,9 @@ Local migration files, in execution order:
 11. `migrations/20261011154610_grading_analytics_ai_summary.sql`
 12. `migrations/20261013104958_debate_topics_ai.sql`
 13. `migrations/20261013121214_production_hardening.sql`
+14. `migrations/20261013171341_teacher_settings_and_preferences.sql`
+15. `migrations/20261013173057_settings_validation_followup.sql`
+16. `migrations/20261013174219_review_notification_counts.sql`
 
 For a new Supabase project, run these files in order in the SQL Editor or through
 the Supabase migration workflow. Do not rerun them on the connected project.
@@ -25,20 +28,22 @@ so no separate manual bucket setup is needed. No migration contains secrets.
 
 ## Ownership and privileges
 
-All eleven public application tables have RLS. Policies target `authenticated`,
+All fifteen public application tables have RLS. Policies target `authenticated`,
 with explicit grants; `anon` has no application table privileges. Ownership uses
 `(select auth.uid())` and parent relationships, never editable user metadata.
 `USING` filters readable/updatable/deletable rows and `WITH CHECK` validates writes.
 
-| Table                                         | Ownership path                                           |
-| --------------------------------------------- | -------------------------------------------------------- |
-| profiles                                      | id = auth.uid()                                          |
-| classes, worksheets, grading_batches, ai_runs | teacher_id = auth.uid()                                  |
-| worksheet_variants, questions                 | worksheet_id → worksheets.teacher_id                     |
-| answer_keys                                   | question_id → questions → worksheets.teacher_id          |
-| submissions                                   | batch_id → grading_batches.teacher_id                    |
-| submission_pages, submission_answers          | submission_id → submissions → grading_batches.teacher_id |
-| private.ai_request_reservations               | teacher_id = auth.uid()                                  |
+| Table                                            | Ownership path                                           |
+| ------------------------------------------------ | -------------------------------------------------------- |
+| profiles                                         | id = auth.uid()                                          |
+| classes, worksheets, grading_batches, ai_runs    | teacher_id = auth.uid()                                  |
+| worksheet_variants, questions                    | worksheet_id → worksheets.teacher_id                     |
+| answer_keys                                      | question_id → questions → worksheets.teacher_id          |
+| submissions                                      | batch_id → grading_batches.teacher_id                    |
+| submission_pages, submission_answers             | submission_id → submissions → grading_batches.teacher_id |
+| private.ai_request_reservations                  | teacher_id = auth.uid()                                  |
+| teacher_settings, teacher_library_entries        | teacher_id = auth.uid()                                  |
+| teacher_notifications, removed_submission_images | teacher_id = auth.uid(), with owned parent validation    |
 
 Answers additionally validate their question's worksheet and variant against the
 submission's batch. Composite foreign keys prevent linking a batch to another
@@ -329,3 +334,32 @@ the bytes of an uploaded image. No table columns or RPC signatures changed.
 
 Remaining external advisories are recorded in the root README. The hosted
 adversarial probe was rolled back completely.
+
+## Teacher settings
+
+Settings are validated with Zod and database constraints. `save_teacher_settings`
+locks the owned profile, checks the settings revision and saves profile fields and
+preferences atomically. The dashboard and header read the persisted display name.
+Grading preferences are copied to a batch on first claim. The completion RPC uses
+that immutable snapshot for confidence and optional AI short-answer acceptance.
+Unreadable/ambiguous/blank and open responses remain manual. Legacy started batches
+use the original defaults. AI presets are deliberately TODO/inactive.
+
+`save_batch_grade_conversion` changes only an owned batch's diary conversion with
+a revision check. It never changes final scores. `save_worksheet_with_library`
+wraps worksheet persistence and optional library entries in one transaction;
+only teacher-saved worksheets and accepted questions enter the library.
+
+Completed-image cleanup uses the authenticated Storage API and an insert-only
+marker, preserving all grading rows. Retention is measured from `completed_at`.
+It runs on authenticated site entry or an explicit settings action, not on a
+background schedule. Original/crop routes retain ownership checks and return a
+constant placeholder after acknowledged removal. Unfinished batches are excluded.
+
+Notifications are owned rows created by grading transitions. Review decisions
+update the outstanding count and mark a resolved notification read. Lists are
+limited to the latest 20; unread counts use an independent exact count.
+All added RPCs/triggers use invoker security and an empty search path.
+
+The generated TypeScript RPC argument contract is corrected for PostgreSQL's
+nullable `p_variant` and `p_student_name`; preserve these when regenerating types.

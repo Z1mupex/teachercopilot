@@ -1,16 +1,25 @@
 import Link from "next/link";
 import { BookOpen } from "lucide-react";
 
-export function Brand({ href = "/dashboard" }: { href?: string }) {
+export function Brand({
+  href = "/dashboard",
+  compact = false,
+}: {
+  href?: string;
+  compact?: boolean;
+}) {
   return (
     <Link
       href={href}
-      className="inline-flex items-center gap-2 rounded-lg text-base font-bold tracking-tight focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring sm:gap-3 sm:text-xl"
+      aria-label="Teacher Copilot — панель"
+      className="inline-flex items-center gap-3 rounded-md text-sm font-bold tracking-tight focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring sm:text-base"
     >
-      <span className="flex size-10 items-center justify-center rounded-xl bg-primary/10 text-primary">
-        <BookOpen className="size-7" aria-hidden="true" />
+      <span className="flex size-8 items-center justify-center rounded-md bg-primary text-primary-foreground">
+        <BookOpen className="size-5" strokeWidth={1.5} aria-hidden="true" />
       </span>
-      <span>Teacher Copilot</span>
+      <span className={compact ? "hidden min-[480px]:inline" : undefined}>
+        Teacher Copilot
+      </span>
     </Link>
   );
 }

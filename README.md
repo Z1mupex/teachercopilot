@@ -446,4 +446,21 @@ verified sessions do not substitute for compromised-password screening. See
 Confirmation email delivery depends on SMTP/template configuration. Physical
 mobile cameras and Safari hardware were not verified during the audit. Further
 prompts require the user's review and explicit request to continue. AI scores
-remain preliminary and subject to teacher confirmation.
+remain preliminary and can be overridden by the teacher before finalization.
+
+## Teacher settings
+
+`/settings` now saves the teacher profile, school, subjects/class labels, signature,
+grading comparisons, diary scales, library preferences, retention and in-app
+notification choices. Russian is enabled; Kazakh and English are planned.
+AI careful/balanced/fast presets are marked TODO and do not change grading.
+
+Comparison preferences are frozen at the first grading claim. Short AI judgments
+can be auto accepted only when explicitly enabled and above the configured gate;
+unsafe recognition and open responses always require manual review. Per-work
+FO/control conversion is editable on results without changing answer scores.
+
+Library entries are saved atomically after explicit worksheet save. Image cleanup
+retains answers/results and removes only completed-batch originals using Storage
+API. Retention runs on site entry or by button; closed-site background cleanup and
+email notifications are not configured. No settings silently delete active papers.

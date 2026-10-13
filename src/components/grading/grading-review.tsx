@@ -1,7 +1,14 @@
 "use client";
 import { useEffect } from "react";
 import Link from "next/link";
-import { ArrowLeft, ArrowRight, RefreshCw, CheckCircle2 } from "lucide-react";
+import {
+  ArrowLeft,
+  ArrowRight,
+  RefreshCw,
+  CheckCircle2,
+  Check,
+  LockKeyhole,
+} from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Progress } from "@/components/ui/progress";
 import { GradingSteps } from "@/components/grading/grading-steps";
@@ -9,10 +16,11 @@ import { ReviewAnswerCard } from "@/components/grading/review-answer-card";
 import { useGradingReview } from "@/components/grading/use-grading-review";
 import { secondaryButtonClass } from "@/components/worksheets/labels";
 import type { ReviewSlice } from "@/types/grading-workflow";
+
 export function GradingReview({ initial }: { initial: ReviewSlice }) {
-  const r = useGradingReview(initial),
-    p = r.data.progress,
-    closed = p.status === "completed";
+  const r = useGradingReview(initial);
+  const p = r.data.progress;
+  const closed = p.status === "completed";
   const canFinalize =
     p.processed === p.submissions.length &&
     p.submissions.length > 0 &&
@@ -51,93 +59,129 @@ export function GradingReview({ initial }: { initial: ReviewSlice }) {
     window.addEventListener("keydown", keyboard);
     return () => window.removeEventListener("keydown", keyboard);
   }, [r, closed]);
+
   return (
-    <div className="min-w-0 space-y-6" aria-busy={r.busy}>
-      <div>
-        <h1 className="text-3xl font-bold tracking-tight sm:text-4xl">
-          Проверить результаты
-        </h1>
-        <p className="mt-3 break-words text-muted-foreground">
-          {p.title} · Окончательное решение принимает учитель.
-        </p>
+    <div className="min-w-0" aria-busy={r.busy}>
+      <Link href="/grading" className="studio-text-button mb-6">
+        <ArrowLeft className="size-3.5" aria-hidden="true" />
+        Все проверки
+      </Link>
+      <div className="flex flex-wrap items-start justify-between gap-4">
+        <div className="min-w-0">
+          <p className="studio-eyebrow mb-3">Проверка работ</p>
+          <h1 className="studio-title">Решения учителя</h1>
+          <p className="mt-3 text-sm text-muted-foreground [overflow-wrap:anywhere]">
+            {p.title}
+          </p>
+        </div>
+        {closed && (
+          <span className="studio-status mt-1">
+            <Check className="size-3.5" aria-hidden="true" />
+            Проверка завершена
+          </span>
+        )}
       </div>
-      <GradingSteps current={3} batchId={p.id} />
-      <section className="space-y-4 rounded-2xl border bg-card p-4 sm:p-5">
-        <div className="grid gap-3 sm:grid-cols-3">
-          <div>
-            <p className="text-sm text-muted-foreground">Требуют проверки</p>
-            <p className="mt-1 text-2xl font-semibold tabular-nums">
+      <div className="mt-7 border-t pt-5">
+        <GradingSteps current={3} batchId={p.id} />
+      </div>
+      <section aria-label="Прогресс проверки" className="mt-7">
+        <div className="flex flex-wrap gap-x-9 gap-y-4">
+          <div className="flex items-baseline gap-2.5">
+            <span className="text-2xl font-bold tabular-nums">
               {p.needsReview}
-            </p>
+            </span>
+            <span className="text-xs text-muted-foreground">нужны решения</span>
           </div>
-          <div>
-            <p className="text-sm text-muted-foreground">Проверено учителем</p>
-            <p className="mt-1 text-2xl font-semibold tabular-nums">
+          <div className="flex items-baseline gap-2.5">
+            <span className="text-2xl font-bold tabular-nums">
               {p.teacherReviewed}
-            </p>
+            </span>
+            <span className="text-xs text-muted-foreground">
+              проверено учителем
+            </span>
           </div>
-          <div>
-            <p className="text-sm text-muted-foreground">Готово ответов</p>
-            <p className="mt-1 text-2xl font-semibold tabular-nums">
-              {p.answers - p.needsReview} / {p.answers}
-            </p>
+          <div className="flex items-baseline gap-2.5">
+            <span className="text-2xl font-bold tabular-nums">
+              {p.answers - p.needsReview}
+              <span className="ml-1 text-base font-normal text-muted-foreground">
+                / {p.answers}
+              </span>
+            </span>
+            <span className="text-xs text-muted-foreground">
+              ответов готово
+            </span>
           </div>
         </div>
-        <Progress
-          aria-label="Готовность ответов"
-          value={p.answers - p.needsReview}
-          max={Math.max(1, p.answers)}
-        />
-        <div className="flex flex-wrap items-center justify-between gap-3">
-          <div className="flex flex-wrap gap-2" aria-label="Режим очереди">
+        <div className="studio-progress mt-4">
+          <Progress
+            aria-label="Готовность ответов"
+            value={p.answers - p.needsReview}
+            max={Math.max(1, p.answers)}
+          />
+        </div>
+        <div className="mt-5 flex flex-wrap items-center justify-between gap-3">
+          <div className="flex flex-wrap gap-1" aria-label="Режим очереди">
             <button
               type="button"
               aria-pressed={!r.all}
               disabled={r.busy}
-              className={`${secondaryButtonClass} ${!r.all ? "border-primary text-primary" : ""}`}
+              className="studio-tab"
               onClick={() => void r.load(false, 0)}
             >
-              Требуют проверки
+              Нужна проверка
+              <span className="ml-2 text-xs tabular-nums opacity-70">
+                {p.needsReview}
+              </span>
             </button>
             <button
               type="button"
               aria-pressed={r.all}
               disabled={r.busy}
-              className={`${secondaryButtonClass} ${r.all ? "border-primary text-primary" : ""}`}
+              className="studio-tab"
               onClick={() => void r.load(true, 0)}
             >
               Все ответы
+              <span className="ml-2 text-xs tabular-nums opacity-70">
+                {p.answers}
+              </span>
             </button>
           </div>
           <button
             type="button"
             disabled={r.busy}
-            className={secondaryButtonClass}
+            className="studio-text-button"
             onClick={() => void r.load()}
           >
-            <RefreshCw className="size-4" />
-            Обновить очередь
+            <RefreshCw
+              className={"size-3.5 " + (r.busy ? "animate-spin" : "")}
+              aria-hidden="true"
+            />
+            Обновить
           </button>
         </div>
       </section>
       {r.error && (
         <p
           role="alert"
-          className="rounded-xl border border-destructive/30 bg-destructive/10 p-4 text-sm text-destructive"
+          className="mt-4 rounded-md border border-destructive/30 bg-destructive/10 p-4 text-sm text-destructive"
         >
           {r.error}
         </p>
       )}
       {r.notice && (
-        <p role="status" className="text-sm text-primary">
+        <p role="status" className="mt-4 text-sm text-primary">
           {r.notice}
         </p>
       )}
       {r.answer ? (
         <>
-          <div className="flex flex-wrap items-center justify-between gap-3">
-            <p role="status" className="text-sm text-muted-foreground">
-              Ответ {r.data.page * 40 + r.index + 1} из {r.data.count}
+          <div className="mt-6 mb-3 flex flex-wrap items-center justify-between gap-3">
+            <p role="status" className="text-xs text-muted-foreground">
+              Ответ{" "}
+              <span className="font-bold text-foreground tabular-nums">
+                {r.data.page * 40 + r.index + 1}
+              </span>{" "}
+              из {r.data.count}
             </p>
             <div className="flex gap-2">
               <button
@@ -147,7 +191,7 @@ export function GradingReview({ initial }: { initial: ReviewSlice }) {
                 disabled={r.busy || (r.index === 0 && r.data.page === 0)}
                 onClick={() => r.navigate(-1)}
               >
-                <ArrowLeft className="size-4" />
+                <ArrowLeft className="size-3.5" aria-hidden="true" />
                 Назад
               </button>
               <button
@@ -160,66 +204,81 @@ export function GradingReview({ initial }: { initial: ReviewSlice }) {
                 onClick={() => r.navigate(1)}
               >
                 Далее
-                <ArrowRight className="size-4" />
+                <ArrowRight className="size-3.5" aria-hidden="true" />
               </button>
             </div>
           </div>
           <ReviewAnswerCard
-            key={`${r.answer.id}:${r.answer.revision}`}
+            key={r.answer.id + ":" + r.answer.revision}
             batchId={p.id}
             answer={r.answer}
             busy={r.busy}
             closed={closed}
             onSave={r.save}
           />
-          <p className="text-xs text-muted-foreground">
-            Клавиатура: ← / → — переход между ответами, Enter — подтвердить
-            балл. Во время ввода балла сочетания отключены.
+          <p className="mt-4 flex flex-wrap items-center gap-x-5 gap-y-2 text-[11px] text-muted-foreground">
+            <span>← / → следующий ответ</span>
+            {closed ? (
+              <span className="flex items-center gap-1.5">
+                <LockKeyhole className="size-3" aria-hidden="true" />
+                Режим просмотра
+              </span>
+            ) : (
+              <span>
+                Enter — подтвердить оценку · во время ввода сочетания отключены
+              </span>
+            )}
           </p>
         </>
       ) : (
-        <div className="rounded-2xl border bg-card p-8 text-center">
-          <CheckCircle2 className="mx-auto mb-3 size-9 text-primary" />
-          <p className="font-semibold">
+        <div className="mt-6 rounded-lg border bg-card px-6 py-12 text-center sm:py-16">
+          <CheckCircle2
+            className="mx-auto mb-4 size-8 text-primary"
+            strokeWidth={1.4}
+            aria-hidden="true"
+          />
+          <h2 className="text-lg font-bold">
             {p.answers === 0
               ? "Пока нет распознанных ответов"
               : "Все сомнительные ответы проверены"}
-          </p>
-          <p className="mt-2 text-sm text-muted-foreground">
+          </h2>
+          <p className="mx-auto mt-3 max-w-md text-sm leading-6 text-muted-foreground">
             {p.processed < p.submissions.length
               ? "Сначала завершите обработку всех работ."
-              : "В режиме «Все ответы» можно просмотреть каждое сравнение и решение."}
+              : "Откройте «Все ответы», чтобы посмотреть сравнения и решения учителя."}
           </p>
         </div>
       )}
-      <div className="flex flex-wrap items-center justify-between gap-3">
+      <div className="mt-7 flex flex-wrap items-center justify-between gap-4 border-t pt-5">
         <Link
-          href={`/grading/${p.id}/process`}
-          className={secondaryButtonClass}
+          href={"/grading/" + p.id + "/process"}
+          className="studio-text-button"
         >
           Прогресс обработки
+          <ArrowRight className="size-3.5" aria-hidden="true" />
         </Link>
         {closed ? (
           <Link
             className={secondaryButtonClass}
-            href={`/grading/${p.id}/results`}
+            href={"/grading/" + p.id + "/results"}
           >
             Итоговые результаты
+            <ArrowRight className="size-3.5" aria-hidden="true" />
           </Link>
         ) : (
           <Button
             disabled={r.busy || !canFinalize}
             onClick={() => void r.finalize()}
           >
-            <CheckCircle2 className="size-4" />
+            <CheckCircle2 className="size-4" aria-hidden="true" />
             Завершить проверку
           </Button>
         )}
       </div>
       {!closed && !canFinalize && (
-        <p className="text-sm text-muted-foreground">
-          Завершение станет доступно после обработки всех работ и проверки всех
-          сомнительных ответов.
+        <p className="mt-3 text-xs leading-5 text-muted-foreground">
+          Завершение доступно после обработки всех работ и проверки сомнительных
+          ответов.
         </p>
       )}
     </div>

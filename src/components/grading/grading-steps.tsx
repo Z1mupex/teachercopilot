@@ -2,11 +2,12 @@ import Link from "next/link";
 import { Check } from "lucide-react";
 
 const steps = [
-  "Загрузить работы",
-  "Добавить ответы",
-  "Распознать и оценить",
-  "Проверить результаты",
+  "Загрузка",
+  "Ответы и баллы",
+  "Распознавание",
+  "Решения учителя",
 ];
+const paths = ["", "/answers", "/process", "/review"];
 
 export function GradingSteps({
   current,
@@ -16,35 +17,43 @@ export function GradingSteps({
   batchId: string;
 }) {
   return (
-    <nav aria-label="Этапы проверки">
-      <ol className="grid gap-2 grid-cols-2 lg:grid-cols-4">
+    <nav aria-label="Этапы проверки" className="studio-steps">
+      <ol className="grid grid-cols-2 gap-x-5 gap-y-3 sm:flex sm:flex-wrap sm:gap-x-7">
         {steps.map((label, index) => (
           <li
             key={label}
             aria-current={index === current ? "step" : undefined}
-            className={`flex min-w-0 flex-col items-start gap-2 rounded-xl border p-3 text-sm sm:flex-row sm:items-center sm:gap-3 ${index === current ? "border-primary/30 bg-primary/10 font-medium text-primary" : "bg-card text-muted-foreground"}`}
+            className={
+              "flex min-w-0 items-center gap-2.5 text-xs " +
+              (index === current
+                ? "font-bold text-primary"
+                : "text-muted-foreground")
+            }
           >
             <span
-              className={`flex size-8 shrink-0 items-center justify-center rounded-full ${index === current ? "bg-primary text-primary-foreground" : "border bg-background"}`}
+              className={
+                "flex size-6 shrink-0 items-center justify-center rounded-full border text-[10px] tabular-nums " +
+                (index === current
+                  ? "border-primary bg-primary text-primary-foreground"
+                  : "border-border")
+              }
             >
               {index < current ? (
-                <Check className="size-4" aria-hidden="true" />
+                <Check className="size-3" aria-hidden="true" />
               ) : (
-                index + 1
+                String(index + 1).padStart(2, "0")
               )}
             </span>
-            <span className="min-w-0 [overflow-wrap:anywhere]">
-              {index < current ? (
-                <Link
-                  className="rounded-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
-                  href={`/grading/${batchId}${["", "/answers", "/process", "/review"][index]}`}
-                >
-                  {label}
-                </Link>
-              ) : (
-                label
-              )}
-            </span>
+            {index < current ? (
+              <Link
+                className="rounded-sm hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+                href={"/grading/" + batchId + paths[index]}
+              >
+                {label}
+              </Link>
+            ) : (
+              <span>{label}</span>
+            )}
           </li>
         ))}
       </ol>

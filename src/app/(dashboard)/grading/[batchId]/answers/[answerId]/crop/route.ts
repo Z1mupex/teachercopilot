@@ -5,6 +5,7 @@ import { getBatch, GradingError } from "@/lib/grading/repository";
 import { cropSchema } from "@/lib/grading/grading-validation";
 import { idSchema } from "@/lib/grading/validation";
 import { privateHeaders, workflowResponse } from "@/lib/grading/workflow-http";
+import { removedImageResponse } from "@/lib/grading/removed-image";
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
 export async function GET(
@@ -22,12 +23,14 @@ export async function GET(
     const { data: a, error } = await client
       .from("submission_answers")
       .select(
-        "recognized_answer,submissions!inner(batch_id,submission_pages(storage_path))",
+        "recognized_answer,submissions!inner(batch_id,submission_pages(storage_path,removed_submission_images(page_id)))",
       )
       .eq("id", answerId)
       .eq("submissions.batch_id", batchId)
       .maybeSingle();
     if (error || !a) throw new GradingError("Ответ недоступен.", 404);
+    if (a.submissions.submission_pages[0]?.removed_submission_images)
+      return removedImageResponse(privateHeaders);
     const recognized = a.recognized_answer;
     const crop = cropSchema.parse(
       recognized && typeof recognized === "object" && !Array.isArray(recognized)

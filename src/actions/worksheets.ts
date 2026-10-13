@@ -34,6 +34,7 @@ function revalidateWorksheets(id: string) {
   for (const path of [
     "/worksheets",
     "/dashboard",
+    "/library",
     `/worksheets/${id}`,
     `/worksheets/${id}/edit`,
   ])

@@ -60,20 +60,21 @@ export function ProfileDropdown({
         aria-expanded={open}
         aria-controls={id}
         aria-label={`Профиль: ${displayName}`}
-        className="flex items-center gap-3 rounded-xl p-2 text-left transition hover:bg-secondary focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+        className="flex min-h-11 items-center gap-2 rounded-md px-2 text-left transition hover:bg-secondary focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
       >
         <span
-          className="flex size-10 items-center justify-center rounded-full bg-secondary text-sm font-semibold text-primary"
+          className="flex size-8 items-center justify-center rounded-full border bg-card text-[11px] font-semibold text-primary"
           aria-hidden="true"
         >
           {initials}
         </span>
-        <span className="hidden sm:block">
-          <span className="block text-sm font-semibold">{displayName}</span>
-          <span className="block text-xs text-muted-foreground">Учитель</span>
+        <span className="hidden md:block">
+          <span className="block max-w-40 truncate text-[13px] font-medium">
+            {displayName}
+          </span>
         </span>
         <ChevronDown
-          className="size-4 text-muted-foreground"
+          className="hidden size-3.5 text-muted-foreground sm:block"
           aria-hidden="true"
         />
       </button>

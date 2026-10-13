@@ -127,7 +127,7 @@ export async function persistWorksheet(
   if (id && !(await getWorksheet(teacherId, id)))
     throw new WorksheetNotFoundError();
   const supabase = await createClient({ writable: true });
-  const { data, error } = await supabase.rpc("save_teacher_worksheet", {
+  const { data, error } = await supabase.rpc("save_worksheet_with_library", {
     p_document: document as Json,
     p_id: id,
     p_expected_updated_at: expectedUpdatedAt,

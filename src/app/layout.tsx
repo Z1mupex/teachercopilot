@@ -1,11 +1,29 @@
 import type { Metadata } from "next";
 import type { ReactNode } from "react";
 import { cookies } from "next/headers";
+import localFont from "next/font/local";
 
 import { ThemeProvider } from "@/components/theme/theme-provider";
 import { parseTheme, themeCookie } from "@/lib/validation/theme";
 
 import "./globals.css";
+
+const studioFont = localFont({
+  src: [
+    {
+      path: "../lib/pdf/fonts/NotoSans-Regular.ttf",
+      weight: "400",
+      style: "normal",
+    },
+    {
+      path: "../lib/pdf/fonts/NotoSans-Bold.ttf",
+      weight: "700",
+      style: "normal",
+    },
+  ],
+  display: "swap",
+  variable: "--font-studio",
+});
 
 export const metadata: Metadata = {
   title: "Teacher Copilot",
@@ -19,7 +37,7 @@ export default async function RootLayout({
 }) {
   const theme = parseTheme((await cookies()).get(themeCookie)?.value);
   return (
-    <html lang="ru" data-theme={theme}>
+    <html lang="ru" data-theme={theme} className={studioFont.variable}>
       <body className="antialiased">
         <a
           href="#main-content"

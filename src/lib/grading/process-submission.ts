@@ -7,6 +7,7 @@ import { recognizeAndGrade } from "@/lib/ai/grade-submission";
 import { AiRequestError } from "@/lib/ai/errors";
 import { gradingAiMessage } from "@/lib/grading/ai-errors";
 import type { Json } from "@/types/database";
+import { getBatchGradingSettings } from "@/lib/settings/repository";
 
 export async function processSubmission(
   teacherId: string,
@@ -53,6 +54,7 @@ export async function processSubmission(
       teacherId,
       Buffer.from(await blob.arrayBuffer()),
       questions,
+      await getBatchGradingSettings(teacherId, batchId),
     );
     saving = true;
     const { error: saveError } = await client.rpc("finish_grading_submission", {

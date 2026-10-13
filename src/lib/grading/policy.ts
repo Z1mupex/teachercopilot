@@ -15,6 +15,7 @@ export const gradingFlagLabels = {
   ai_judgment: "Оценка требует суждения",
   unsupported_number: "Не удалось сопоставить число",
   conflicting_choices: "Несогласованные варианты ответа",
+  comparison_mismatch: "Нужна проверка по правилам сравнения",
   open_response: "Развёрнутый ответ",
   missing: "Модель не нашла ответ",
 } as const;

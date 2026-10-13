@@ -141,7 +141,10 @@ export type Database = {
           answer_key_source: string | null;
           answer_key_worksheet_id: string | null;
           class_id: string | null;
+          completed_at: string | null;
           created_at: string;
+          grade_conversion: Json | null;
+          grading_preferences: Json | null;
           grading_started_at: string | null;
           id: string;
           processed_submissions: number;
@@ -158,7 +161,10 @@ export type Database = {
           answer_key_source?: string | null;
           answer_key_worksheet_id?: string | null;
           class_id?: string | null;
+          completed_at?: string | null;
           created_at?: string;
+          grade_conversion?: Json | null;
+          grading_preferences?: Json | null;
           grading_started_at?: string | null;
           id?: string;
           processed_submissions?: number;
@@ -175,7 +181,10 @@ export type Database = {
           answer_key_source?: string | null;
           answer_key_worksheet_id?: string | null;
           class_id?: string | null;
+          completed_at?: string | null;
           created_at?: string;
+          grade_conversion?: Json | null;
+          grading_preferences?: Json | null;
           grading_started_at?: string | null;
           id?: string;
           processed_submissions?: number;
@@ -291,6 +300,39 @@ export type Database = {
             columns: ["worksheet_id"];
             isOneToOne: false;
             referencedRelation: "worksheets";
+            referencedColumns: ["id"];
+          },
+        ];
+      };
+      removed_submission_images: {
+        Row: {
+          page_id: string;
+          removed_at: string;
+          teacher_id: string;
+        };
+        Insert: {
+          page_id: string;
+          removed_at?: string;
+          teacher_id: string;
+        };
+        Update: {
+          page_id?: string;
+          removed_at?: string;
+          teacher_id?: string;
+        };
+        Relationships: [
+          {
+            foreignKeyName: "removed_submission_images_page_id_fkey";
+            columns: ["page_id"];
+            isOneToOne: true;
+            referencedRelation: "submission_pages";
+            referencedColumns: ["id"];
+          },
+          {
+            foreignKeyName: "removed_submission_images_teacher_id_fkey";
+            columns: ["teacher_id"];
+            isOneToOne: false;
+            referencedRelation: "profiles";
             referencedColumns: ["id"];
           },
         ];
@@ -462,6 +504,134 @@ export type Database = {
           },
         ];
       };
+      teacher_library_entries: {
+        Row: {
+          content: Json | null;
+          created_at: string;
+          entry_key: string;
+          folder: string;
+          id: string;
+          kind: string;
+          tags: string[];
+          teacher_id: string;
+          title: string;
+          worksheet_id: string;
+        };
+        Insert: {
+          content?: Json | null;
+          created_at?: string;
+          entry_key: string;
+          folder: string;
+          id?: string;
+          kind: string;
+          tags?: string[];
+          teacher_id: string;
+          title: string;
+          worksheet_id: string;
+        };
+        Update: {
+          content?: Json | null;
+          created_at?: string;
+          entry_key?: string;
+          folder?: string;
+          id?: string;
+          kind?: string;
+          tags?: string[];
+          teacher_id?: string;
+          title?: string;
+          worksheet_id?: string;
+        };
+        Relationships: [
+          {
+            foreignKeyName: "teacher_library_entries_teacher_id_fkey";
+            columns: ["teacher_id"];
+            isOneToOne: false;
+            referencedRelation: "profiles";
+            referencedColumns: ["id"];
+          },
+          {
+            foreignKeyName: "teacher_library_entries_worksheet_id_teacher_id_fkey";
+            columns: ["worksheet_id", "teacher_id"];
+            isOneToOne: false;
+            referencedRelation: "worksheets";
+            referencedColumns: ["id", "teacher_id"];
+          },
+        ];
+      };
+      teacher_notifications: {
+        Row: {
+          batch_id: string;
+          created_at: string;
+          id: string;
+          item_count: number;
+          kind: string;
+          read_at: string | null;
+          teacher_id: string;
+        };
+        Insert: {
+          batch_id: string;
+          created_at?: string;
+          id?: string;
+          item_count: number;
+          kind: string;
+          read_at?: string | null;
+          teacher_id: string;
+        };
+        Update: {
+          batch_id?: string;
+          created_at?: string;
+          id?: string;
+          item_count?: number;
+          kind?: string;
+          read_at?: string | null;
+          teacher_id?: string;
+        };
+        Relationships: [
+          {
+            foreignKeyName: "teacher_notifications_batch_id_teacher_id_fkey";
+            columns: ["batch_id", "teacher_id"];
+            isOneToOne: false;
+            referencedRelation: "grading_batches";
+            referencedColumns: ["id", "teacher_id"];
+          },
+          {
+            foreignKeyName: "teacher_notifications_teacher_id_fkey";
+            columns: ["teacher_id"];
+            isOneToOne: false;
+            referencedRelation: "profiles";
+            referencedColumns: ["id"];
+          },
+        ];
+      };
+      teacher_settings: {
+        Row: {
+          document: Json;
+          revision: number;
+          teacher_id: string;
+          updated_at: string;
+        };
+        Insert: {
+          document: Json;
+          revision?: number;
+          teacher_id: string;
+          updated_at?: string;
+        };
+        Update: {
+          document?: Json;
+          revision?: number;
+          teacher_id?: string;
+          updated_at?: string;
+        };
+        Relationships: [
+          {
+            foreignKeyName: "teacher_settings_teacher_id_fkey";
+            columns: ["teacher_id"];
+            isOneToOne: true;
+            referencedRelation: "profiles";
+            referencedColumns: ["id"];
+          },
+        ];
+      };
       worksheet_variants: {
         Row: {
           created_at: string;
@@ -544,6 +714,7 @@ export type Database = {
     };
     Functions: {
       claim_grading_submission: {
+        // PostgreSQL accepts NULL for the base worksheet variant.
         Args: {
           p_batch: string;
           p_submission: string;
@@ -595,6 +766,15 @@ export type Database = {
         };
         Returns: undefined;
       };
+      save_batch_grade_conversion: {
+        Args: {
+          p_batch: string;
+          p_kind: string;
+          p_revision: string;
+          p_scale: Json;
+        };
+        Returns: undefined;
+      };
       save_grading_answer_key: {
         Args: {
           p_batch: string;
@@ -606,7 +786,19 @@ export type Database = {
         };
         Returns: string;
       };
+      save_teacher_settings: {
+        Args: { p_document: Json; p_revision: number };
+        Returns: number;
+      };
       save_teacher_worksheet: {
+        Args: {
+          p_document: Json;
+          p_expected_updated_at?: string;
+          p_id?: string;
+        };
+        Returns: Json;
+      };
+      save_worksheet_with_library: {
         Args: {
           p_document: Json;
           p_expected_updated_at?: string;

@@ -1,6 +1,61 @@
 import type { QuestionInput } from "@/types/worksheets";
-import { GRADING_POLICY, type GradingFlag } from "@/lib/grading/policy";
+import { type GradingFlag } from "@/lib/grading/policy";
 import type { RecognizedAnswer } from "@/lib/grading/grading-validation";
+import {
+  defaultSettings,
+  gradingSettings,
+  type GradingSettings,
+} from "@/lib/settings/schema";
+
+function oneLetterTypo(a: string, b: string) {
+  if (
+    a.length < 4 ||
+    b.length < 4 ||
+    a.length > 120 ||
+    b.length > 120 ||
+    Math.abs(a.length - b.length) > 1 ||
+    !/^[\p{L} ]+$/u.test(a) ||
+    !/^[\p{L} ]+$/u.test(b) ||
+    a.toLocaleLowerCase() === b.toLocaleLowerCase()
+  )
+    return false;
+  let i = 0,
+    j = 0,
+    edits = 0;
+  while (i < a.length && j < b.length) {
+    if (a[i] === b[j]) {
+      i++;
+      j++;
+      continue;
+    }
+    if (++edits > 1) return false;
+    if (a.length >= b.length) i++;
+    if (b.length >= a.length) j++;
+  }
+  return edits + (a.length - i) + (b.length - j) <= 1;
+}
+
+function shortAnswerMatches(a: string, b: string, settings: GradingSettings) {
+  let actual = normalizeText(a),
+    expected = normalizeText(b);
+  if (settings.ignore_case) {
+    actual = actual.toLocaleLowerCase();
+    expected = expected.toLocaleLowerCase();
+  }
+  if (actual === expected) return true;
+  if (settings.fraction_equivalence) {
+    const numberA = normalizeNumber(actual),
+      numberB = normalizeNumber(expected);
+    if (
+      numberA !== null &&
+      numberB !== null &&
+      Math.abs(numberA - numberB) <=
+        Number.EPSILON * Math.max(1, Math.abs(numberB)) * 4
+    )
+      return true;
+  }
+  return settings.typo_tolerance && oneLetterTypo(actual, expected);
+}
 
 export function normalizeText(answer: string) {
   // Case is retained: e.g. Co/CO and German Sie/sie can differ semantically.
@@ -47,6 +102,7 @@ export type GradedAnswer = {
 export function gradeRecognizedAnswer(
   question: QuestionInput,
   recognized?: RecognizedAnswer,
+  settings: GradingSettings = gradingSettings(defaultSettings),
 ): GradedAnswer {
   const flags = new Set<GradingFlag>(recognized?.flags ?? ["missing"]);
   let confidence = recognized?.confidence ?? 0;
@@ -81,7 +137,10 @@ export function gradeRecognizedAnswer(
           : "Набор выбранных вариантов отличается от ключа.";
       }
     } else if (question.type === "numeric") {
-      const value = normalizeNumber(text ?? "");
+      const value =
+        !settings.fraction_equivalence && /[\/½¼¾]/u.test(text ?? "")
+          ? null
+          : normalizeNumber(text ?? "");
       if (value === null) {
         flags.add("unsupported_number");
         confidence = Math.min(confidence, 0.5);
@@ -91,7 +150,16 @@ export function gradeRecognizedAnswer(
           question.tolerance,
           Number.EPSILON * Math.max(1, Math.abs(question.expected_answer)) * 4,
         );
-        const matches = Math.abs(value - question.expected_answer) <= tolerance;
+        const round = (number: number) =>
+          settings.rounding_digits === null
+            ? number
+            : Math.round(
+                (number + Math.sign(number) * Number.EPSILON) *
+                  10 ** settings.rounding_digits,
+              ) /
+              10 ** settings.rounding_digits;
+        const matches =
+          Math.abs(round(value) - round(question.expected_answer)) <= tolerance;
         score = matches ? question.max_score : 0;
         explanation = matches
           ? "Число совпадает с эталоном с учётом погрешности."
@@ -99,14 +167,42 @@ export function gradeRecognizedAnswer(
       }
     } else if (
       question.type === "short_answer" &&
-      normalizeText(text ?? "") === normalizeText(question.expected_answer)
+      shortAnswerMatches(text ?? "", question.expected_answer, settings)
     ) {
       score = question.max_score;
-      explanation = "Ответ совпадает с ключом после нормализации пробелов.";
+      explanation = "Ответ совпадает с ключом по выбранным правилам сравнения.";
     } else {
       flags.add("ai_judgment");
+      if (question.type === "short_answer") {
+        const actual = normalizeText(text ?? ""),
+          expected = normalizeText(question.expected_answer);
+        const compareActual = settings.ignore_case
+          ? actual.toLocaleLowerCase()
+          : actual;
+        const compareExpected = settings.ignore_case
+          ? expected.toLocaleLowerCase()
+          : expected;
+        const actualNumber = normalizeNumber(actual),
+          expectedNumber = normalizeNumber(expected);
+        // AI auto acceptance must not silently relax the teacher's explicit rules.
+        if (
+          (!settings.ignore_case &&
+            actual !== expected &&
+            actual.toLocaleLowerCase() === expected.toLocaleLowerCase()) ||
+          (!settings.typo_tolerance &&
+            oneLetterTypo(compareActual, compareExpected)) ||
+          (!settings.fraction_equivalence &&
+            actualNumber !== null &&
+            expectedNumber !== null &&
+            Math.abs(actualNumber - expectedNumber) <=
+              Number.EPSILON * Math.max(1, Math.abs(expectedNumber)) * 4)
+        ) {
+          flags.add("comparison_mismatch");
+        }
+      }
       if (question.type === "open_response") flags.add("open_response");
-      confidence = Math.min(confidence, 0.9);
+      if (!settings.auto_confirm_ai || question.type === "open_response")
+        confidence = Math.min(confidence, 0.9);
       score = recognized?.proposed_score ?? 0;
       explanation =
         recognized?.explanation ||
@@ -121,7 +217,7 @@ export function gradeRecognizedAnswer(
     question.max_score,
     Math.max(0, Math.round(score * 10000) / 10000),
   );
-  if (confidence < GRADING_POLICY.highConfidence) flags.add("low_confidence");
+  if (confidence < settings.confidence_threshold) flags.add("low_confidence");
   return {
     question_id: question.id,
     text,
@@ -132,8 +228,11 @@ export function gradeRecognizedAnswer(
     flags: [...flags],
     crop: recognized?.crop ?? null,
     review_status:
-      confidence >= GRADING_POLICY.highConfidence &&
-      flags.size === 0 &&
+      settings.auto_confirm &&
+      confidence >= settings.confidence_threshold &&
+      [...flags].every(
+        (flag) => flag === "ai_judgment" && settings.auto_confirm_ai,
+      ) &&
       question.type !== "open_response"
         ? "auto_accepted"
         : "needs_review",
@@ -143,6 +242,7 @@ export function gradeRecognizedAnswer(
 export function gradeSubmission(
   questions: QuestionInput[],
   answers: RecognizedAnswer[],
+  settings: GradingSettings = gradingSettings(defaultSettings),
 ) {
   const expected = new Set(questions.map((question) => question.id));
   const byId = new Map<string, RecognizedAnswer>();
@@ -152,6 +252,6 @@ export function gradeSubmission(
     byId.set(answer.question_id, answer);
   }
   return questions.map((question) =>
-    gradeRecognizedAnswer(question, byId.get(question.id)),
+    gradeRecognizedAnswer(question, byId.get(question.id), settings),
   );
 }

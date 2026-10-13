@@ -1,8 +1,11 @@
 import type { ReactNode } from "react";
-import { Heart, Menu, Sprout } from "lucide-react";
+import { Menu } from "lucide-react";
 
 import { Brand } from "@/components/brand";
 import { Navigation } from "@/components/shell/navigation";
+import { HeaderContext } from "@/components/shell/header-context";
+import { NotificationsMenu } from "@/components/shell/notifications-menu";
+import { RetentionCleanup } from "@/components/settings/retention-cleanup";
 import { ProfileDropdown } from "@/components/shell/profile-dropdown";
 import { ThemeSelect } from "@/components/theme/theme-select";
 
@@ -10,44 +13,42 @@ export function AppShell({
   children,
   displayName,
   email,
+  retentionEnabled = false,
 }: {
   children: ReactNode;
   displayName: string;
   email?: string;
+  retentionEnabled?: boolean;
 }) {
   return (
-    <div className="min-h-screen lg:grid lg:grid-cols-[250px_minmax(0,1fr)]">
-      <aside className="sticky top-0 hidden h-screen flex-col border-r bg-card/70 lg:flex">
-        <div className="flex h-20 items-center border-b px-5">
+    <div className="min-h-screen lg:grid lg:grid-cols-[224px_minmax(0,1fr)]">
+      <aside className="sticky top-0 hidden h-screen flex-col border-r bg-card lg:flex">
+        <div className="flex h-16 items-center border-b px-5">
           <Brand />
         </div>
-        <div className="flex-1 px-3 py-6">
+        <div className="flex-1 px-3 py-5">
           <Navigation />
         </div>
-        <div className="m-5 flex items-end gap-3 rounded-2xl bg-secondary p-4">
-          <p className="text-sm leading-6 text-secondary-foreground">
-            Помогаем учителям делать больше важного{" "}
-            <Heart
-              className="inline size-3.5 fill-blue-300 text-blue-300"
-              aria-hidden="true"
-            />
+        <div className="mx-5 border-t py-5">
+          <p className="text-xs font-medium">Материалы. Уроки. Решения.</p>
+          <p className="mt-2 text-xs leading-5 text-muted-foreground">
+            Пространство для вашей работы.
           </p>
-          <Sprout
-            className="size-12 shrink-0 text-emerald-500/70"
-            aria-hidden="true"
-          />
         </div>
       </aside>
       <div className="min-w-0">
-        <header className="flex min-h-20 items-center justify-between gap-2 border-b bg-card px-4 sm:gap-4 sm:px-8">
+        <header className="flex min-h-16 items-center justify-between gap-2 border-b bg-background px-4 sm:gap-4 sm:px-8">
           <div className="lg:hidden">
-            <Brand />
+            <Brand compact />
           </div>
-          <p className="hidden text-sm text-muted-foreground lg:block">
-            Ваше рабочее пространство
-          </p>
-          <div className="flex items-center gap-1 sm:gap-3">
+          <HeaderContext />
+          <div className="flex shrink-0 items-center gap-1 sm:gap-4">
             <ThemeSelect />
+            <NotificationsMenu />
+            <span
+              className="hidden h-5 w-px bg-border sm:block"
+              aria-hidden="true"
+            />
             <ProfileDropdown displayName={displayName} email={email} />
           </div>
         </header>
@@ -62,8 +63,9 @@ export function AppShell({
         </details>
         <main
           id="main-content"
-          className="mx-auto max-w-[1500px] px-5 py-8 sm:px-8 sm:py-10"
+          className="mx-auto max-w-[1400px] px-4 py-7 sm:px-8 sm:py-9"
         >
+          <RetentionCleanup enabled={retentionEnabled} />
           {children}
         </main>
       </div>

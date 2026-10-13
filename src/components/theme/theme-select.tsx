@@ -1,35 +1,65 @@
 "use client";
 
-import { Laptop, Moon, Sun } from "lucide-react";
+import { useSyncExternalStore } from "react";
+import { Monitor, Moon, Sun } from "lucide-react";
 import { useTheme } from "@/components/theme/theme-provider";
-import { parseTheme } from "@/lib/validation/theme";
+import { Switch } from "@/components/ui/switch";
+import { cn } from "@/lib/utils";
+
+const darkQuery = "(prefers-color-scheme: dark)";
+
+function subscribe(callback: () => void) {
+  const media = window.matchMedia(darkQuery);
+  media.addEventListener("change", callback);
+  return () => media.removeEventListener("change", callback);
+}
+
+function getSystemDark() {
+  return window.matchMedia(darkQuery).matches;
+}
+
+function getServerDark() {
+  return false;
+}
 
 export function ThemeSelect() {
   const { theme, setTheme } = useTheme();
-  const Icon = theme === "dark" ? Moon : theme === "light" ? Sun : Laptop;
+  const systemDark = useSyncExternalStore(
+    subscribe,
+    getSystemDark,
+    getServerDark,
+  );
+  const dark = theme === "dark" || (theme === "system" && systemDark);
+  const Icon = dark ? Moon : Sun;
+
   return (
-    <label className="relative inline-flex shrink-0 items-center">
-      <span className="sr-only">Тема оформления</span>
+    <div
+      role="group"
+      aria-label="Тема оформления"
+      className="flex shrink-0 items-center"
+    >
       <Icon
-        className="pointer-events-none absolute left-3 size-4 text-muted-foreground"
+        className="hidden size-3.5 text-muted-foreground sm:block"
         aria-hidden="true"
       />
-      <select
-        aria-label="Тема оформления"
-        value={theme}
-        onChange={(event) => setTheme(parseTheme(event.target.value))}
-        className="h-11 w-11 cursor-pointer appearance-none rounded-xl border bg-card pl-9 text-transparent outline-none hover:bg-secondary focus-visible:ring-2 focus-visible:ring-ring sm:w-40 sm:pr-3 sm:text-sm sm:text-foreground"
+      <Switch
+        aria-label="Тёмная тема"
+        checked={dark}
+        onCheckedChange={(checked) => setTheme(checked ? "dark" : "light")}
+      />
+      <button
+        type="button"
+        aria-label="Тема как в системе"
+        aria-pressed={theme === "system"}
+        title="Как в системе"
+        onClick={() => setTheme("system")}
+        className={cn(
+          "flex size-11 items-center justify-center rounded-md transition-colors hover:bg-secondary focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring",
+          theme === "system" ? "text-primary" : "text-muted-foreground",
+        )}
       >
-        <option value="light" className="bg-card text-sm text-foreground">
-          Светлая
-        </option>
-        <option value="dark" className="bg-card text-sm text-foreground">
-          Тёмная
-        </option>
-        <option value="system" className="bg-card text-sm text-foreground">
-          Как в системе
-        </option>
-      </select>
-    </label>
+        <Monitor className="size-4" aria-hidden="true" />
+      </button>
+    </div>
   );
 }
