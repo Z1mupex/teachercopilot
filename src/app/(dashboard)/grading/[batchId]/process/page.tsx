@@ -1,0 +1,35 @@
+import { notFound } from "next/navigation";
+import { requireUser } from "@/lib/auth/session";
+import { isAiConfigured } from "@/lib/env";
+import { idSchema } from "@/lib/grading/validation";
+import { getGradingProgress } from "@/lib/grading/workflow-repository";
+import { getAnswerKey } from "@/lib/grading/answer-key-repository";
+import { GradingProcessor } from "@/components/grading/grading-processor";
+export const metadata = { title: "Распознать и оценить — Teacher Copilot" };
+export default async function Page({
+  params,
+}: {
+  params: Promise<{ batchId: string }>;
+}) {
+  const user = await requireUser("/grading");
+  const { batchId } = await params;
+  if (!idSchema.safeParse(batchId).success) notFound();
+  const [progress, key] = await Promise.all([
+    getGradingProgress(user.id, batchId),
+    getAnswerKey(user.id, batchId),
+  ]);
+  if (!progress || !key) notFound();
+  return (
+    <GradingProcessor
+      initial={progress}
+      variants={[
+        { id: null, label: "Вариант 1" },
+        ...(key.document.variants ?? []).map((v) => ({
+          id: v.id,
+          label: v.label,
+        })),
+      ]}
+      aiConfigured={isAiConfigured()}
+    />
+  );
+}
