@@ -27,7 +27,7 @@ export async function processSubmission(
     throw new GradingError("Укажите существующий вариант.", 422);
   const client = await createClient({ writable: true });
   const { data: attempt, error: claimError } = await client.rpc(
-    "claim_grading_submission",
+    "claim_grading_submission_v2",
     { p_batch: batchId, p_submission: submissionId, p_variant: variantId },
   );
   if (claimError) workflowError(claimError);

@@ -140,6 +140,7 @@ export type Database = {
           answer_key_review: Json;
           answer_key_source: string | null;
           answer_key_worksheet_id: string | null;
+          autonomy_config: Json | null;
           class_id: string | null;
           completed_at: string | null;
           created_at: string;
@@ -160,6 +161,7 @@ export type Database = {
           answer_key_review?: Json;
           answer_key_source?: string | null;
           answer_key_worksheet_id?: string | null;
+          autonomy_config?: Json | null;
           class_id?: string | null;
           completed_at?: string | null;
           created_at?: string;
@@ -180,6 +182,7 @@ export type Database = {
           answer_key_review?: Json;
           answer_key_source?: string | null;
           answer_key_worksheet_id?: string | null;
+          autonomy_config?: Json | null;
           class_id?: string | null;
           completed_at?: string | null;
           created_at?: string;
@@ -714,13 +717,29 @@ export type Database = {
     };
     Functions: {
       claim_grading_submission: {
-        // PostgreSQL accepts NULL for the base worksheet variant.
         Args: {
           p_batch: string;
           p_submission: string;
           p_variant: string | null;
         };
         Returns: string;
+      };
+      claim_grading_submission_v2: {
+        Args: {
+          p_batch: string;
+          p_submission: string;
+          p_variant: string | null;
+        };
+        Returns: string;
+      };
+      configure_grading_autonomy: {
+        Args: {
+          p_acknowledged: boolean;
+          p_batch: string;
+          p_preferences: Json;
+          p_revision: string;
+        };
+        Returns: undefined;
       };
       delete_teacher_worksheet: { Args: { p_id: string }; Returns: boolean };
       fail_grading_submission: {
@@ -765,6 +784,15 @@ export type Database = {
           p_score?: number;
         };
         Returns: undefined;
+      };
+      review_grading_answers: {
+        Args: {
+          p_answers: Json;
+          p_batch: string;
+          p_submission: string;
+          p_whole_paper: boolean;
+        };
+        Returns: number;
       };
       save_batch_grade_conversion: {
         Args: {

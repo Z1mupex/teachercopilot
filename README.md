@@ -88,16 +88,20 @@ the page stops new launches; already submitted requests can finish.
 The server scores exact choice sets, safe decimal/fraction equivalence and exact
 whitespace-normalized text matches. Semantically significant case is preserved.
 Other short answers and open responses use the teacher key/rubric for a preliminary
-AI judgment. Missing, blank, unreadable, ambiguous and all AI-judged/open responses
-require teacher review. Policy lives in `src/lib/grading/policy.ts`.
+AI judgment. Missing, blank, unreadable and ambiguous responses always require
+teacher review. Careful accepts deterministic matches from 95% confidence; balanced
+also accepts short AI judgments from 95%; fast also accepts open judgments against
+confirmed criteria from 90%. Custom rules remain available. Confidence is a model
+self-assessment, not measured accuracy. Policy lives in `src/lib/grading/policy.ts`.
 
-Review defaults to **Требуют проверки**; **Все ответы** permits overrides. Cards
-show private original images/optional crops, recognized answers, expected answers,
-rubrics, scores, confidence and reasons. Decisions save immediately with revision
-checks. Unreadable is an explicit zero-point decision, correctable before finalization.
-Arrow keys navigate; Enter confirms outside editable/interactive controls. Pages
-contain at most 40 answers. Finalization requires complete submissions and no
-pending review; PostgreSQL recomputes final totals from stored answers. Results
+Review now shows a complete student paper: private original, every answer,
+proposed/accepted totals and decision origins. Open a question for its key, rubric
+and override controls; move directly to the next exception. Group confirmation
+uses selected answers or all eligible proposals of that paper. It validates every
+revision atomically and preserves earlier teacher corrections. Blank, unreadable,
+ambiguous and missing answers require individual decisions. All preliminary scores
+remain editable until explicit finalization. PostgreSQL recomputes final totals
+and refuses unfinished jobs or unresolved answers. Results
 become read-only and show scores, maxima, percentages and optional recognized names.
 
 Use the existing `GROQ_API_KEY` and optional `GROQ_VISION_MODEL`. Each grading key
@@ -453,11 +457,13 @@ remain preliminary and can be overridden by the teacher before finalization.
 `/settings` now saves the teacher profile, school, subjects/class labels, signature,
 grading comparisons, diary scales, library preferences, retention and in-app
 notification choices. Russian is enabled; Kazakh and English are planned.
-AI careful/balanced/fast presets are marked TODO and do not change grading.
+AI careful/balanced/fast presets are active account defaults. Each new batch
+requires explicit mode confirmation before recognition; first claim freezes it.
 
 Comparison preferences are frozen at the first grading claim. Short AI judgments
 can be auto accepted only when explicitly enabled and above the configured gate;
-unsafe recognition and open responses always require manual review. Per-work
+unsafe recognition always requires manual review. Fast mode can also accept
+confident open responses against confirmed criteria. Per-work
 FO/control conversion is editable on results without changing answer scores.
 
 Library entries are saved atomically after explicit worksheet save. Image cleanup

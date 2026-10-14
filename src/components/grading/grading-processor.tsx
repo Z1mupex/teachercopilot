@@ -1,5 +1,6 @@
 "use client";
 import Link from "next/link";
+import { useState } from "react";
 import {
   Play,
   Pause,
@@ -20,6 +21,12 @@ import {
   useGradingProcessor,
 } from "@/components/grading/use-grading-processor";
 import type { GradingProgress } from "@/types/grading-workflow";
+import {
+  AutonomyEditor,
+  AutonomySummary,
+} from "@/components/grading/autonomy-editor";
+import { autonomySchema, type AutonomyRules } from "@/lib/grading/autonomy";
+import { configureGradingAutonomy } from "@/actions/grading-autonomy";
 const statusLabels: Record<string, string> = {
   uploaded: "Ожидает запуска",
   processing: "Обрабатывается",
@@ -32,10 +39,12 @@ export function GradingProcessor({
   initial,
   variants,
   aiConfigured,
+  defaultAutonomy,
 }: {
   initial: GradingProgress;
   variants: { id: string | null; label: string }[];
   aiConfigured: boolean;
+  defaultAutonomy: AutonomyRules;
 }) {
   const p = useGradingProcessor(initial, variants.length > 1),
     batch = p.progress;
@@ -44,6 +53,43 @@ export function GradingProcessor({
   );
   const ready = pending.length > 0 && pending.every((s) => p.selections[s.id]);
   const closed = batch.status === "completed";
+  const [autonomy, setAutonomy] = useState(
+    batch.autonomy.config ?? defaultAutonomy,
+  );
+  const [savingAutonomy, setSavingAutonomy] = useState(false);
+  const configured =
+    batch.autonomy.frozen ||
+    (!!batch.autonomy.config &&
+      JSON.stringify(autonomySchema.safeParse(autonomy).data) ===
+        JSON.stringify(autonomySchema.safeParse(batch.autonomy.config).data));
+  async function saveAutonomy() {
+    if (savingAutonomy || p.running) return;
+    if (!autonomySchema.safeParse(autonomy).success) {
+      p.setError("Проверьте порог confidence и параметры режима.");
+      return;
+    }
+    setSavingAutonomy(true);
+    p.setError(null);
+    try {
+      const result = await configureGradingAutonomy({
+        batch: batch.id,
+        revision: batch.autonomy.revision,
+        preferences: autonomy,
+        acknowledged: true,
+      });
+      if ("error" in result) {
+        p.setError(result.error ?? "Не удалось сохранить режим.");
+        return;
+      }
+      await p.refresh();
+    } catch {
+      p.setError(
+        "Режим не подтверждён сервером. Обновите страницу перед запуском.",
+      );
+    } finally {
+      setSavingAutonomy(false);
+    }
+  }
   return (
     <div className="min-w-0 space-y-6">
       <div>
@@ -53,6 +99,39 @@ export function GradingProcessor({
         <p className="mt-3 break-words text-muted-foreground">{batch.title}</p>
       </div>
       <GradingSteps current={2} batchId={batch.id} />
+      <section
+        aria-label="Самостоятельность ИИ для этой проверки"
+        className="space-y-4 rounded-lg border bg-card p-5 sm:p-6"
+      >
+        <h2 className="text-lg font-semibold">Самостоятельность ИИ</h2>
+        {batch.autonomy.frozen && batch.autonomy.config ? (
+          <AutonomySummary rules={batch.autonomy.config} frozen />
+        ) : (
+          <>
+            <p className="text-sm text-muted-foreground">
+              Подтвердите режим перед первым запуском. Он применяется ко всем
+              работам этой проверки и фиксируется при запуске.
+            </p>
+            <AutonomyEditor
+              value={autonomy}
+              onChange={setAutonomy}
+              disabled={p.running || savingAutonomy}
+            />
+            <Button
+              onClick={saveAutonomy}
+              disabled={
+                p.running || savingAutonomy || configured || !batch.confirmed
+              }
+            >
+              {savingAutonomy
+                ? "Сохраняем…"
+                : configured
+                  ? "Режим выбран"
+                  : "Использовать этот режим"}
+            </Button>
+          </>
+        )}
+      </section>
       <section className="space-y-5 rounded-2xl border bg-card p-4 sm:p-6">
         <div className="flex flex-wrap items-start justify-between gap-4">
           <div>
@@ -64,8 +143,8 @@ export function GradingProcessor({
               Проверено {batch.processed}/{batch.submissions.length}
             </h2>
             <p className="mt-2 max-w-2xl text-sm text-muted-foreground">
-              AI предлагает предварительные баллы. Сомнительные и развёрнутые
-              ответы проверяет учитель. Каждый ответ сохраняется; после закрытия
+              ИИ предлагает предварительные баллы по выбранному режиму. Спорные
+              места проверяет учитель. Каждый ответ сохраняется; после закрытия
               страницы можно продолжить.
             </p>
           </div>
@@ -116,7 +195,12 @@ export function GradingProcessor({
           <div className="flex flex-wrap items-center gap-3">
             <Button
               disabled={
-                !ready || p.running || !batch.confirmed || !aiConfigured
+                !ready ||
+                p.running ||
+                !batch.confirmed ||
+                !aiConfigured ||
+                !configured ||
+                savingAutonomy
               }
               onClick={() => void p.run(pending.map((s) => s.id))}
             >
@@ -229,7 +313,9 @@ export function GradingProcessor({
                         p.running ||
                         !p.selections[s.id] ||
                         !aiConfigured ||
-                        !batch.confirmed
+                        !batch.confirmed ||
+                        !configured ||
+                        savingAutonomy
                       }
                       className={secondaryButtonClass}
                       onClick={() => void p.run([s.id])}

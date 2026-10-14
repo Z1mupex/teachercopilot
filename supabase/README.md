@@ -342,8 +342,9 @@ locks the owned profile, checks the settings revision and saves profile fields a
 preferences atomically. The dashboard and header read the persisted display name.
 Grading preferences are copied to a batch on first claim. The completion RPC uses
 that immutable snapshot for confidence and optional AI short-answer acceptance.
-Unreadable/ambiguous/blank and open responses remain manual. Legacy started batches
-use the original defaults. AI presets are deliberately TODO/inactive.
+Unreadable/ambiguous/blank responses remain manual. Open responses can be auto
+accepted only with the explicit fast/custom gate and confirmed criteria. Legacy
+started batches retain their original rules; account edits never rewrite them.
 
 `save_batch_grade_conversion` changes only an owned batch's diary conversion with
 a revision check. It never changes final scores. `save_worksheet_with_library`
@@ -363,3 +364,27 @@ All added RPCs/triggers use invoker security and an empty search path.
 
 The generated TypeScript RPC argument contract is corrected for PostgreSQL's
 nullable `p_variant` and `p_student_name`; preserve these when regenerating types.
+
+## Per-batch autonomy and whole-paper review
+
+Migrations 20261014081036, 20261014081918 and 20261014084943 add validated
+`autonomy_config`, `configure_grading_autonomy`, `claim_grading_submission_v2`
+and atomic `review_grading_answers`. Acknowledged per-batch rules require an
+unstarted ready batch and exact revision. The first v2 claim refuses missing
+configuration and copies it into the existing immutable grading snapshot.
+The older claim RPC remains compatible with deployed clients and defaults open
+auto acceptance off. Diary conversion still snapshots independently.
+
+Completion requires a live exact attempt and the full variant question set.
+Open auto acceptance requires both AI flags, enabled AI/open gates and nonempty
+confirmed criteria. Blank unflagged payloads, unsafe flags and scores below the
+confidence gate fail closed. Group review locks batch/submission/selected answers,
+checks all revisions before writes, rejects duplicates and foreign/unsafe rows,
+and checks the exact current eligible set for whole-paper confirmation. It reuses
+the single-answer review workflow in one transaction, retaining notification
+counts and teacher overrides. Finalization stays explicit and server-derived.
+
+Rollback probes covered all three presets, acknowledgement/revision/ownership
+checks, two-job concurrency, frozen settings, unsafe/blank auto rejection, atomic
+stale groups, duplicates, whole-selection changes, overrides and finalization.
+Browser verification used synthetic fixtures only. No auth bypass or new secrets.

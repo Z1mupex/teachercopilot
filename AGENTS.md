@@ -45,7 +45,7 @@ This block is written and re-added by `next dev` — verify at `node_modules/nex
 - Run npm run lint, npm run typecheck and npm run build after changes.
 - Complete only the prompt explicitly authorized by the user. Prompt 0 establishes
   the foundation; auth/application shell belong to prompt 1, schema/RLS to prompt 2.
-- Class/worksheet CRUD and real dashboard queries run server-side
+- Prompts 0–14 are implemented. Class/worksheet CRUD and real dashboard queries run server-side
   on the connected Supabase project. Mutations derive teacher_id from requireUser(),
   filter by ownership, validate with Zod, and revalidate classes/detail/dashboard.
 - Supabase clients use generated Database types from src/types/database.ts.
@@ -98,13 +98,13 @@ This block is written and re-added by `next dev` — verify at `node_modules/nex
   Failures affect only that paper; stale attempts cannot overwrite a retry.
 - Grading policy lives in src/lib/grading/policy.ts and src/lib/grading/score.ts.
   Choice/numeric/exact text scores are computed deterministically. Missing, blank,
-  ambiguous, unreadable and open responses always require teacher review. Case is
+  ambiguous and unreadable responses always require teacher review. Case is
   preserved by default; comparison preferences can explicitly relax short answers.
 - review_grading_answer checks ownership, answer revision and score bounds. Finalization
   recomputes totals in PostgreSQL and requires complete jobs with no needs_review answers.
   Started workflow rows cannot be edited directly. Completed results are read-only;
   unreadable is an explicit teacher decision assigning zero.
-- Reviews page 40 answers at a time. Original images and normalized-coordinate crops
+- Legacy review/preview APIs page 40 answers at a time. Original images and normalized-coordinate crops
   stay behind owned no-store routes. Never accept remote crop URLs or browser totals.
 - Analytics uses final scores from owned completed batches. Keep variant question
   identities separate and missing scores distinct from wrong answers. Fetch every
@@ -141,9 +141,15 @@ This block is written and re-added by `next dev` — verify at `node_modules/nex
 - Snapshot grading comparison preferences on the first claim; later profile edits
   cannot change a running batch. Legacy running batches retain the original defaults.
   Optional AI short-answer auto acceptance requires the configured confidence gate,
-  no unsafe flags and explicit auto_confirm_ai. Open responses stay manual. The SQL
+  no unsafe flags and explicit auto_confirm_ai. Open responses require auto_confirm_open
+  and confirmed criteria; careful/balanced keep them manual. The SQL
   completion gate must match these rules. All preliminary scores remain overridable.
-- TODO: AI careful/balanced/fast presets are saved/displayed but NEVER applied.
+- Careful/balanced/fast presets are active; custom changes use mode custom. Confirm
+  per-batch autonomy_config before the v2 first claim, then freeze its snapshot.
+  Legacy v1 callers retain conservative defaults during deployment rollout.
+- Whole-paper review reads the complete selected variant (up to 100 answers).
+  Group confirmation validates every revision before any writes, excludes unsafe
+  recognition and teacher-reviewed rows, and never trusts browser scores/totals.
   Diary conversion is separate from answer scores; owned per-batch scales can be
   changed through save_batch_grade_conversion without rewriting grading results.
 - Library preferences apply only after the teacher explicitly saves a worksheet.

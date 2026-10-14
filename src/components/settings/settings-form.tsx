@@ -31,7 +31,9 @@ import {
   defaultFoScale,
   defaultControlScale,
   type TeacherSettings,
+  gradingSettings,
 } from "@/lib/settings/schema";
+import { AutonomyEditor } from "@/components/grading/autonomy-editor";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
 import { Switch } from "@/components/ui/switch";
@@ -209,6 +211,25 @@ export function SettingsForm({
   ) => {
     setError("");
     setNotice("");
+    if (
+      [
+        "auto_confirm",
+        "auto_confirm_ai",
+        "auto_confirm_open",
+        "confidence_threshold",
+        "fraction_equivalence",
+        "ignore_case",
+        "typo_tolerance",
+        "rounding_digits",
+      ].includes(key)
+    )
+      setValue("ai_preset", "custom", { shouldDirty: true });
+    if (key === "auto_confirm" && value === false) {
+      setValue("auto_confirm_ai", false, { shouldDirty: true });
+      setValue("auto_confirm_open", false, { shouldDirty: true });
+    }
+    if (key === "auto_confirm_ai" && value === false)
+      setValue("auto_confirm_open", false, { shouldDirty: true });
     setValue(key, value, { shouldDirty: true, shouldValidate: true });
   };
   const toggle = (
@@ -430,7 +451,7 @@ export function SettingsForm({
                   {toggle(
                     "auto_confirm_ai",
                     "Автоподтверждение оценок ИИ",
-                    "Разрешить оценки ИИ для коротких ответов выше заданного порога. Развёрнутые, пустые, нечитаемые и неоднозначные ответы всегда идут учителю.",
+                    "Разрешить оценки ИИ для коротких ответов выше заданного порога. Развёрнутые ответы разрешаются отдельно в разделе «Режим ИИ». Пустые, нечитаемые и неоднозначные ответы всегда идут учителю.",
                   )}
                 </div>
                 <Field
@@ -503,57 +524,26 @@ export function SettingsForm({
             )}
             {section === "ai" && (
               <>
-                <p className="rounded-md border border-dashed p-4 text-sm leading-6">
-                  <span className="mr-2 font-mono text-xs text-primary">
-                    TODO
-                  </span>
-                  Пресет сохраняется как предпочтение. Он пока не меняет
-                  проверку, порог уверенности и правила сравнения.
+                <p className="text-sm leading-6 text-muted-foreground">
+                  Значение по умолчанию для новых проверок. Перед запуском
+                  каждой проверки режим нужно подтвердить; начатые работы
+                  сохраняют свои правила.
                 </p>
-                {/* TODO: Apply AI presets only after teacher-reviewed policy design; never override manual grading rules implicitly. */}
-                <div className="space-y-3">
-                  {[
-                    {
-                      value: "careful",
-                      title: "Осторожный",
-                      text: "Больше спорных мест направляется учителю.",
-                    },
-                    {
-                      value: "balanced",
-                      title: "Баланс",
-                      text: "Автоматическая обработка уверенных ответов, ручной контроль спорных.",
-                    },
-                    {
-                      value: "fast",
-                      title: "Быстрый · полный контроль",
-                      text: "Большинство уверенных ответов принимается автоматически; учитель сохраняет контроль.",
-                    },
-                  ].map((p) => (
-                    <label
-                      key={p.value}
-                      className={cn(
-                        "flex cursor-pointer items-start gap-3 rounded-md border p-4",
-                        values.ai_preset === p.value &&
-                          "border-primary bg-secondary/40",
-                      )}
-                    >
-                      <input
-                        type="radio"
-                        {...register("ai_preset")}
-                        value={p.value}
-                        className="mt-1 accent-primary"
-                      />
-                      <span>
-                        <span className="block text-sm font-semibold">
-                          {p.title}
-                        </span>
-                        <span className="mt-1 block text-xs leading-5 text-muted-foreground">
-                          {p.text}
-                        </span>
-                      </span>
-                    </label>
-                  ))}
-                </div>
+                <AutonomyEditor
+                  value={{ ...gradingSettings(values), mode: values.ai_preset }}
+                  disabled={isSubmitting}
+                  onChange={(rules) => {
+                    change("auto_confirm", rules.auto_confirm);
+                    change("auto_confirm_ai", rules.auto_confirm_ai);
+                    change("auto_confirm_open", rules.auto_confirm_open);
+                    change("confidence_threshold", rules.confidence_threshold);
+                    change("fraction_equivalence", rules.fraction_equivalence);
+                    change("ignore_case", rules.ignore_case);
+                    change("typo_tolerance", rules.typo_tolerance);
+                    change("rounding_digits", rules.rounding_digits);
+                    change("ai_preset", rules.mode);
+                  }}
+                />
               </>
             )}
             {section === "assessment" && (

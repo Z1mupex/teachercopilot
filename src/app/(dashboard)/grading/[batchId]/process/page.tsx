@@ -5,6 +5,8 @@ import { idSchema } from "@/lib/grading/validation";
 import { getGradingProgress } from "@/lib/grading/workflow-repository";
 import { getAnswerKey } from "@/lib/grading/answer-key-repository";
 import { GradingProcessor } from "@/components/grading/grading-processor";
+import { getTeacherSettings } from "@/lib/settings/repository";
+import { gradingSettings } from "@/lib/settings/schema";
 export const metadata = { title: "Распознать и оценить — Teacher Copilot" };
 export default async function Page({
   params,
@@ -14,9 +16,10 @@ export default async function Page({
   const user = await requireUser("/grading");
   const { batchId } = await params;
   if (!idSchema.safeParse(batchId).success) notFound();
-  const [progress, key] = await Promise.all([
+  const [progress, key, preferences] = await Promise.all([
     getGradingProgress(user.id, batchId),
     getAnswerKey(user.id, batchId),
+    getTeacherSettings(user.id),
   ]);
   if (!progress || !key) notFound();
   return (
@@ -30,6 +33,10 @@ export default async function Page({
         })),
       ]}
       aiConfigured={isAiConfigured()}
+      defaultAutonomy={{
+        ...gradingSettings(preferences.settings),
+        mode: preferences.settings.ai_preset,
+      }}
     />
   );
 }

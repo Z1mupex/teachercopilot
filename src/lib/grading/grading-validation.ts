@@ -59,3 +59,23 @@ export const reviewInputSchema = z.discriminatedUnion("command", [
     })
     .strict(),
 ]);
+export const bulkReviewSchema = z
+  .object({
+    command: z.literal("confirm_many"),
+    submission_id: z.uuid(),
+    answers: z
+      .array(
+        z
+          .object({ id: z.uuid(), revision: z.iso.datetime({ offset: true }) })
+          .strict(),
+      )
+      .min(1)
+      .max(100),
+    whole_paper: z.boolean(),
+  })
+  .strict()
+  .refine(
+    (input) =>
+      new Set(input.answers.map((a) => a.id)).size === input.answers.length,
+    "Выберите разные ответы.",
+  );

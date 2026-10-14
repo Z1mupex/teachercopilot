@@ -200,9 +200,15 @@ export function gradeRecognizedAnswer(
           flags.add("comparison_mismatch");
         }
       }
-      if (question.type === "open_response") flags.add("open_response");
-      if (!settings.auto_confirm_ai || question.type === "open_response")
-        confidence = Math.min(confidence, 0.9);
+      if (question.type === "open_response") {
+        flags.add("open_response");
+        if (!question.rubric?.trim() && !question.expected_answer?.trim())
+          flags.add("missing_criteria");
+      }
+      if (recognized?.proposed_score == null) {
+        flags.add("ambiguous");
+        confidence = Math.min(confidence, 0.5);
+      }
       score = recognized?.proposed_score ?? 0;
       explanation =
         recognized?.explanation ||
@@ -231,9 +237,13 @@ export function gradeRecognizedAnswer(
       settings.auto_confirm &&
       confidence >= settings.confidence_threshold &&
       [...flags].every(
-        (flag) => flag === "ai_judgment" && settings.auto_confirm_ai,
+        (flag) =>
+          (flag === "ai_judgment" && settings.auto_confirm_ai) ||
+          (flag === "open_response" &&
+            settings.auto_confirm_open &&
+            settings.auto_confirm_ai),
       ) &&
-      question.type !== "open_response"
+      (question.type !== "open_response" || settings.auto_confirm_open)
         ? "auto_accepted"
         : "needs_review",
   };

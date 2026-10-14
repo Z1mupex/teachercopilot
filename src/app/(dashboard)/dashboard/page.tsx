@@ -52,8 +52,8 @@ export default async function DashboardPage() {
   const data = await getDashboardData(user.id);
   return (
     <div className="space-y-8">
-      <div className="flex flex-wrap items-start justify-between gap-6">
-        <div className="min-w-0 max-w-full flex-1">
+      <div className="flex flex-col items-start gap-6 xl:flex-row xl:justify-between">
+        <div className="w-full min-w-0 xl:flex-1">
           <p className="mb-2 text-sm font-medium text-primary">
             Ваш день начинается здесь
           </p>
@@ -69,7 +69,7 @@ export default async function DashboardPage() {
             />
           </p>
         </div>
-        <div className="flex max-w-xs gap-3 rounded-2xl bg-gradient-to-br from-amber-50 to-blue-50 p-4 text-sm leading-6 text-muted-foreground dark:from-amber-950/30 dark:to-blue-950/40">
+        <div className="flex w-full min-w-0 gap-3 rounded-2xl bg-gradient-to-br from-amber-50 to-blue-50 p-4 text-sm leading-6 text-muted-foreground xl:max-w-xs xl:shrink-0 dark:from-amber-950/30 dark:to-blue-950/40">
           <Sparkles
             className="mt-1 size-5 shrink-0 text-amber-500"
             aria-hidden="true"

@@ -3,7 +3,10 @@ import { revalidatePath } from "next/cache";
 import { requireUser } from "@/lib/auth/session";
 import { createClient } from "@/lib/supabase/server";
 import { idSchema } from "@/lib/grading/validation";
-import { reviewInputSchema } from "@/lib/grading/grading-validation";
+import {
+  reviewInputSchema,
+  bulkReviewSchema,
+} from "@/lib/grading/grading-validation";
 import {
   getReviewSlice,
   workflowError,
@@ -51,6 +54,7 @@ export async function POST(request: Request, { params }: Context) {
     const input = z
       .union([
         reviewInputSchema,
+        bulkReviewSchema,
         z.object({ command: z.literal("finalize") }).strict(),
       ])
       .parse(await readWorkflowJson(request));
@@ -58,13 +62,20 @@ export async function POST(request: Request, { params }: Context) {
     const { error } =
       input.command === "finalize"
         ? await client.rpc("finalize_grading_batch", { p_batch: batchId })
-        : await client.rpc("review_grading_answer", {
-            p_batch: batchId,
-            p_answer: input.answer_id,
-            p_revision: input.revision,
-            p_command: input.command,
-            ...(input.command === "score" ? { p_score: input.score } : {}),
-          });
+        : input.command === "confirm_many"
+          ? await client.rpc("review_grading_answers", {
+              p_batch: batchId,
+              p_submission: input.submission_id,
+              p_answers: input.answers,
+              p_whole_paper: input.whole_paper,
+            })
+          : await client.rpc("review_grading_answer", {
+              p_batch: batchId,
+              p_answer: input.answer_id,
+              p_revision: input.revision,
+              p_command: input.command,
+              ...(input.command === "score" ? { p_score: input.score } : {}),
+            });
     if (error) workflowError(error);
     for (const path of [
       "/grading",

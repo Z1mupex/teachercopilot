@@ -5,10 +5,14 @@ import { throwDatabaseError } from "@/lib/database/errors";
 import {
   defaultSettings,
   settingsSchema,
-  gradingSettings,
   scaleSchema,
 } from "@/lib/settings/schema";
 import { z } from "zod";
+import {
+  parseStoredAutonomy,
+  legacyAutonomy,
+  matchesPreset,
+} from "@/lib/grading/autonomy";
 
 export async function getTeacherSettings(teacherId: string) {
   const client = await createClient();
@@ -28,14 +32,31 @@ export async function getTeacherSettings(teacherId: string) {
     if (result.error) throwDatabaseError("teacher-settings", result.error);
   if (!profile.data)
     throwDatabaseError("teacher-settings-profile", { code: "MissingProfile" });
+  const document = saved.data?.document;
+  const settings = document
+    ? settingsSchema.parse({
+        ...(document as Record<string, unknown>),
+        auto_confirm_open:
+          (document as Record<string, unknown>).auto_confirm_open ?? false,
+      })
+    : {
+        ...defaultSettings,
+        full_name: profile.data.full_name || "Учитель",
+        school_name: profile.data.school_name ?? "",
+      };
+  if (!settings.auto_confirm) {
+    settings.auto_confirm_ai = false;
+    settings.auto_confirm_open = false;
+  }
+  if (!settings.auto_confirm_ai) settings.auto_confirm_open = false;
+  // Preserve previously active comparison rules when upgrading the dormant preset.
+  if (
+    settings.ai_preset !== "custom" &&
+    !matchesPreset(settings, settings.ai_preset)
+  )
+    settings.ai_preset = "custom";
   return {
-    settings: saved.data
-      ? settingsSchema.parse(saved.data.document)
-      : {
-          ...defaultSettings,
-          full_name: profile.data.full_name || "Учитель",
-          school_name: profile.data.school_name ?? "",
-        },
+    settings,
     revision: saved.data?.revision ?? 0,
   };
 }
@@ -52,18 +73,8 @@ export async function getBatchGradingSettings(
     .eq("teacher_id", teacherId)
     .single();
   if (error) throwDatabaseError("batch-preferences", error);
-  if (!data?.grading_preferences) return gradingSettings(defaultSettings);
-  return settingsSchema
-    .pick({
-      auto_confirm: true,
-      auto_confirm_ai: true,
-      confidence_threshold: true,
-      fraction_equivalence: true,
-      ignore_case: true,
-      typo_tolerance: true,
-      rounding_digits: true,
-    })
-    .parse(data.grading_preferences);
+  if (!data?.grading_preferences) return legacyAutonomy;
+  return parseStoredAutonomy(data.grading_preferences);
 }
 
 const conversionSchema = z.object({

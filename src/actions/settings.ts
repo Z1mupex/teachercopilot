@@ -4,7 +4,12 @@ import { z } from "zod";
 import { revalidatePath } from "next/cache";
 import { requireUser } from "@/lib/auth/session";
 import { createClient } from "@/lib/supabase/server";
-import { settingsSchema, scaleSchema } from "@/lib/settings/schema";
+import {
+  settingsSchema,
+  scaleSchema,
+  gradingSettings,
+} from "@/lib/settings/schema";
+import { autonomySchema } from "@/lib/grading/autonomy";
 import { cleanupCompletedImages } from "@/lib/settings/privacy";
 import type { Json } from "@/types/database";
 
@@ -21,6 +26,16 @@ export async function saveTeacherSettings(input: unknown) {
         path: issue.path.join("."),
         message: issue.message,
       })),
+    };
+  if (
+    !autonomySchema.safeParse({
+      ...gradingSettings(parsed.data.document),
+      mode: parsed.data.document.ai_preset,
+    }).success
+  )
+    return {
+      error:
+        "Проверьте режим ИИ: изменённые параметры нужно сохранить как «Свои правила».",
     };
   const client = await createClient({ writable: true });
   const { data, error } = await client.rpc("save_teacher_settings", {

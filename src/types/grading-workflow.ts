@@ -1,5 +1,6 @@
 import type { QuestionInput } from "@/types/worksheets";
 import type { GradedAnswer } from "@/lib/grading/score";
+import type { AutonomyRules } from "@/lib/grading/autonomy";
 
 export type SubmissionProgress = {
   id: string;
@@ -25,6 +26,7 @@ export type GradingProgress = {
   answers: number;
   needsReview: number;
   teacherReviewed: number;
+  autonomy: { config: AutonomyRules | null; frozen: boolean; revision: string };
 };
 export type ReviewAnswer = {
   id: string;
@@ -39,7 +41,7 @@ export type ReviewAnswer = {
   choiceIds: string[];
   flags: string[];
   crop: GradedAnswer["crop"];
-  proposedScore: number;
+  proposedScore: number | null;
   finalScore: number | null;
   confidence: number;
   explanation: string;
@@ -51,4 +53,10 @@ export type ReviewSlice = {
   count: number;
   page: number;
   progress: GradingProgress;
+};
+export type WorkReview = {
+  progress: GradingProgress;
+  submission: SubmissionProgress | null;
+  answers: ReviewAnswer[];
+  maximum: number | null;
 };

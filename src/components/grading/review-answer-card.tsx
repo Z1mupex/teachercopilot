@@ -32,6 +32,7 @@ export function ReviewAnswerCard({
   busy,
   closed,
   preview = false,
+  hideOriginal = false,
   onSave,
 }: {
   batchId: string;
@@ -39,6 +40,7 @@ export function ReviewAnswerCard({
   busy: boolean;
   closed: boolean;
   preview?: boolean;
+  hideOriginal?: boolean;
   onSave: (
     command: "confirm" | "score" | "unreadable",
     score?: number,
@@ -46,7 +48,7 @@ export function ReviewAnswerCard({
 }) {
   const [full, setFull] = useState(!answer.crop);
   const [score, setScore] = useState(
-    String(answer.finalScore ?? answer.proposedScore),
+    String(answer.finalScore ?? answer.proposedScore ?? ""),
   );
   const numeric = /^\d+(?:[.,]\d{1,4})?$/u.test(score)
     ? Number(score.replace(",", "."))
@@ -91,50 +93,56 @@ export function ReviewAnswerCard({
             : (labels[answer.status] ?? answer.status)}
         </span>
       </header>
-      <div className="grid min-w-0 lg:grid-cols-[1.04fr_1fr]">
-        <div className="min-w-0 border-b lg:border-r lg:border-b-0">
-          <div className="flex flex-wrap items-center justify-between gap-3 px-5 py-4 sm:px-6">
-            <h3 className="text-xs font-bold">
-              {full ? "Оригинал работы" : "Область ответа, выделенная AI"}
-            </h3>
-            {answer.crop && (
-              <button
-                type="button"
+      <div
+        className={
+          hideOriginal ? "min-w-0" : "grid min-w-0 lg:grid-cols-[1.04fr_1fr]"
+        }
+      >
+        {!hideOriginal && (
+          <div className="min-w-0 border-b lg:border-r lg:border-b-0">
+            <div className="flex flex-wrap items-center justify-between gap-3 px-5 py-4 sm:px-6">
+              <h3 className="text-xs font-bold">
+                {full ? "Оригинал работы" : "Область ответа, выделенная AI"}
+              </h3>
+              {answer.crop && (
+                <button
+                  type="button"
+                  className="studio-text-button"
+                  onClick={() => setFull(!full)}
+                >
+                  <Eye className="size-3.5" aria-hidden="true" />
+                  {full ? "Область ответа" : "Вся страница"}
+                </button>
+              )}
+            </div>
+            <div className="studio-paper-view">
+              <PagePreview
+                key={src}
+                src={src}
+                label={
+                  "Оригинал работы № " +
+                  answer.submissionNumber +
+                  ", задание " +
+                  answer.questionNumber
+                }
+              />
+            </div>
+            <div className="flex flex-wrap items-center justify-between gap-3 px-5 py-4 sm:px-6">
+              <span className="text-xs text-muted-foreground">
+                {full ? "Полная страница" : "Фрагмент оригинала"}
+              </span>
+              <a
+                href={original}
                 className="studio-text-button"
-                onClick={() => setFull(!full)}
+                target="_blank"
+                rel="noreferrer"
               >
-                <Eye className="size-3.5" aria-hidden="true" />
-                {full ? "Область ответа" : "Вся страница"}
-              </button>
-            )}
+                Открыть оригинал
+                <ExternalLink className="size-3.5" aria-hidden="true" />
+              </a>
+            </div>
           </div>
-          <div className="studio-paper-view">
-            <PagePreview
-              key={src}
-              src={src}
-              label={
-                "Оригинал работы № " +
-                answer.submissionNumber +
-                ", задание " +
-                answer.questionNumber
-              }
-            />
-          </div>
-          <div className="flex flex-wrap items-center justify-between gap-3 px-5 py-4 sm:px-6">
-            <span className="text-xs text-muted-foreground">
-              {full ? "Полная страница" : "Фрагмент оригинала"}
-            </span>
-            <a
-              href={original}
-              className="studio-text-button"
-              target="_blank"
-              rel="noreferrer"
-            >
-              Открыть оригинал
-              <ExternalLink className="size-3.5" aria-hidden="true" />
-            </a>
-          </div>
-        </div>
+        )}
         <div className="studio-review-details min-w-0 px-5 py-6 sm:px-7">
           <div className="border-b pb-5">
             <h3 className="studio-eyebrow">Задание</h3>
@@ -170,14 +178,18 @@ export function ReviewAnswerCard({
               <div>
                 <h3 className="text-xs font-bold">Предварительная оценка</h3>
                 <p className="mt-1 text-2xl font-bold tabular-nums">
-                  {answer.proposedScore}
+                  {answer.proposedScore ?? "—"}
                   <span className="ml-1.5 text-sm font-normal text-muted-foreground">
                     / {answer.question.max_score}
                   </span>
                 </p>
               </div>
               <div className="text-right text-xs text-muted-foreground">
-                <p>Уверенность распознавания</p>
+                <p>
+                  {answer.flags.includes("ai_judgment")
+                    ? "Уверенность ИИ"
+                    : "Уверенность распознавания"}
+                </p>
                 <p className="mt-1 font-bold text-foreground">
                   {confidenceLabel(answer.confidence)} ·{" "}
                   {Math.round(answer.confidence * 100)}%
@@ -223,9 +235,13 @@ export function ReviewAnswerCard({
             <fieldset disabled={busy} className="mt-6 border-t pt-5">
               <legend className="sr-only">Решение учителя</legend>
               <p className="mb-4 text-sm font-bold">Решение учителя</p>
-              <Button className="w-full" onClick={() => void onSave("confirm")}>
+              <Button
+                className="w-full"
+                disabled={answer.proposedScore === null}
+                onClick={() => void onSave("confirm")}
+              >
                 <Check className="size-4" aria-hidden="true" />
-                Подтвердить оценку · {answer.proposedScore}
+                Подтвердить оценку · {answer.proposedScore ?? "—"}
               </Button>
               <div className="mt-4 flex flex-wrap items-end gap-3">
                 <div className="min-w-0 flex-1">
@@ -271,7 +287,9 @@ export function ReviewAnswerCard({
               <p className="mt-4 text-xs leading-5 text-muted-foreground">
                 {preview
                   ? "В режиме примерки решения остаются только на этом экране."
-                  : "Решение сохраняется сразу. До завершения проверки его можно изменить в режиме «Все ответы»."}
+                  : hideOriginal
+                    ? "Решение сохраняется сразу. До завершения проверки можно снова открыть задание и изменить балл."
+                    : "Решение сохраняется сразу. До завершения проверки его можно изменить в режиме «Все ответы»."}
               </p>
             </fieldset>
           )}

@@ -1,4 +1,5 @@
 import { z } from "zod";
+import { autonomyModeSchema } from "@/lib/grading/autonomy";
 
 export const scaleSchema = z
   .array(
@@ -67,6 +68,7 @@ export const settingsSchema = z
     signature: z.string().trim().max(500, "Подпись — не более 500 символов."),
     auto_confirm: z.boolean(),
     auto_confirm_ai: z.boolean(),
+    auto_confirm_open: z.boolean(),
     confidence_threshold: z
       .number({ error: "Введите число от 0,50 до 1,00." })
       .min(0.5, "Порог уверенности должен быть от 0,50 до 1,00.")
@@ -75,7 +77,7 @@ export const settingsSchema = z
     ignore_case: z.boolean(),
     typo_tolerance: z.boolean(),
     rounding_digits: z.number().int().min(0).max(8).nullable(),
-    ai_preset: z.enum(["careful", "balanced", "fast"]),
+    ai_preset: autonomyModeSchema,
     fo_scale: scaleSchema.refine(
       (rows) => rows.at(-1)?.grade === 10,
       "Шкала ФО должна заканчиваться оценкой 10.",
@@ -106,6 +108,7 @@ export type GradingSettings = Pick<
   TeacherSettings,
   | "auto_confirm"
   | "auto_confirm_ai"
+  | "auto_confirm_open"
   | "confidence_threshold"
   | "fraction_equivalence"
   | "ignore_case"
@@ -121,12 +124,13 @@ export const defaultSettings: TeacherSettings = {
   signature: "",
   auto_confirm: true,
   auto_confirm_ai: false,
+  auto_confirm_open: false,
   confidence_threshold: 0.95,
   fraction_equivalence: true,
   ignore_case: false,
   typo_tolerance: false,
   rounding_digits: null,
-  ai_preset: "balanced",
+  ai_preset: "careful",
   fo_scale: defaultFoScale,
   control_scale: defaultControlScale,
   library_worksheets: false,
@@ -159,6 +163,7 @@ export function gradingSettings(settings: TeacherSettings): GradingSettings {
   return {
     auto_confirm: settings.auto_confirm,
     auto_confirm_ai: settings.auto_confirm_ai,
+    auto_confirm_open: settings.auto_confirm_open,
     confidence_threshold: settings.confidence_threshold,
     fraction_equivalence: settings.fraction_equivalence,
     ignore_case: settings.ignore_case,

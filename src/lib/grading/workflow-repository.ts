@@ -6,6 +6,9 @@ import { GradingError } from "@/lib/grading/repository";
 import { getAnswerKey } from "@/lib/grading/answer-key-repository";
 import { cropSchema } from "@/lib/grading/grading-validation";
 import type { GradingProgress, ReviewSlice } from "@/types/grading-workflow";
+import type { WorkReview, ReviewAnswer } from "@/types/grading-workflow";
+import { readAllRows } from "@/lib/database/read-all-rows";
+import { parseStoredAutonomy, legacyAutonomy } from "@/lib/grading/autonomy";
 
 export const REVIEW_PAGE_SIZE = 40;
 export function workflowError(error: { code?: string }) {
@@ -13,7 +16,7 @@ export function workflowError(error: { code?: string }) {
     PT404: "Работа недоступна.",
     PT409:
       "Состояние проверки изменилось. Обновите страницу. Завершение доступно после обработки работ и проверки всех сомнительных ответов.",
-    PT412: "Ответ уже изменён в другой вкладке. Обновите очередь.",
+    PT412: "Ответ уже изменён в другой вкладке. Обновите работу.",
     PT422: "Проверьте вариант, ответы и допустимые баллы.",
     PT429: "Уже обрабатываются две работы. Дождитесь результата.",
   };
@@ -30,13 +33,28 @@ export async function getGradingProgress(
   const { data: b, error } = await client
     .from("grading_batches")
     .select(
-      "id,title,status,answer_key_confirmed_at,processed_submissions,submissions(id,status,student_name,variant_id,grading_lease_until,grading_error,proposed_score,final_score,max_score,upload_index,created_at,submission_pages(id))",
+      "id,title,status,answer_key_confirmed_at,processed_submissions,grading_started_at,grading_preferences,autonomy_config,updated_at",
     )
     .eq("id", batchId)
     .eq("teacher_id", teacherId)
     .maybeSingle();
   if (error) throwDatabaseError("grading-progress", error);
   if (!b) return null;
+  const submissions = await readAllRows("grading-submissions", (from, to) =>
+    client
+      .from("submissions")
+      .select(
+        "id,status,student_name,variant_id,grading_lease_until,grading_error,proposed_score,final_score,max_score,upload_index,created_at,submission_pages(id)",
+        { count: "exact" },
+      )
+      .eq("batch_id", batchId)
+      .order("upload_index", { nullsFirst: false })
+      .order("created_at")
+      .order("id")
+      .range(from, to),
+  );
+  if (submissions.length > 1000)
+    throw new GradingError("Слишком много работ в одной проверке.", 422);
   const countAnswers = (statuses?: string[]) => {
     let query = client
       .from("submission_answers")
@@ -63,7 +81,18 @@ export async function getGradingProgress(
     answers: counts[0].count!,
     needsReview: counts[1].count!,
     teacherReviewed: counts[2].count!,
-    submissions: b.submissions
+    autonomy: {
+      config: b.grading_preferences
+        ? parseStoredAutonomy(b.grading_preferences)
+        : b.grading_started_at
+          ? legacyAutonomy
+          : b.autonomy_config
+            ? parseStoredAutonomy(b.autonomy_config)
+            : null,
+      frozen: !!b.grading_started_at,
+      revision: b.updated_at,
+    },
+    submissions: submissions
       .sort(
         (a, b) =>
           (a.upload_index ?? Number.MAX_SAFE_INTEGER) -
@@ -154,12 +183,96 @@ export async function getReviewSlice(
         flags: recognized.flags,
         crop: recognized.crop,
         teacherUnreadable: recognized.teacher_unreadable,
-        proposedScore: a.proposed_score ?? 0,
+        proposedScore: a.proposed_score,
         finalScore: a.final_score,
         confidence: a.confidence ?? 0,
         explanation: a.reasoning_summary ?? "",
         status: a.review_status,
       };
     }),
+  };
+}
+
+export async function getWorkReview(
+  teacherId: string,
+  batchId: string,
+  submissionId?: string,
+): Promise<WorkReview | null> {
+  const [progress, key] = await Promise.all([
+    getGradingProgress(teacherId, batchId),
+    getAnswerKey(teacherId, batchId),
+  ]);
+  if (!progress || !key) return null;
+  const submission = submissionId
+    ? progress.submissions.find((s) => s.id === submissionId)
+    : (progress.submissions.find((s) => s.status === "needs_review") ??
+      progress.submissions.find((s) =>
+        ["proposed", "completed"].includes(s.status),
+      ) ??
+      progress.submissions[0]);
+  if (submissionId && !submission) return null;
+  if (!submission)
+    return { progress, submission: null, answers: [], maximum: null };
+  const group =
+    submission.variantId === null
+      ? key.document.questions
+      : key.document.variants?.find((v) => v.id === submission.variantId)
+          ?.questions;
+  if (!group)
+    throw new GradingError("Вариант работы не совпадает с ключом.", 503);
+  const byQuestion = new Map(
+    group.map((q, index) => [q.id, { question: q, number: index + 1 }]),
+  );
+  const client = await createClient();
+  const rows = await readAllRows("work-answers", (from, to) =>
+    client
+      .from("submission_answers")
+      .select("*", { count: "exact" })
+      .eq("submission_id", submission.id)
+      .order("id")
+      .range(from, to),
+  );
+  if (
+    rows.length > 100 ||
+    (["proposed", "needs_review", "completed"].includes(submission.status) &&
+      rows.length !== group.length)
+  )
+    throw new GradingError(
+      "Получен неполный набор ответов. Обновите работу.",
+      503,
+    );
+  const answers: ReviewAnswer[] = rows
+    .map((a) => {
+      const q = byQuestion.get(a.question_id);
+      if (!q || !submission.pageId)
+        throw new GradingError("Ответ не совпадает с вариантом работы.", 503);
+      const recognized = storedAnswerSchema.parse(a.recognized_answer);
+      return {
+        id: a.id,
+        revision: a.updated_at,
+        submissionId: submission.id,
+        submissionNumber: submission.number,
+        studentName: submission.studentName,
+        pageId: submission.pageId,
+        questionNumber: q.number,
+        question: q.question,
+        text: recognized.text,
+        choiceIds: recognized.choice_ids,
+        flags: recognized.flags,
+        crop: recognized.crop,
+        teacherUnreadable: recognized.teacher_unreadable,
+        proposedScore: a.proposed_score,
+        finalScore: a.final_score,
+        confidence: a.confidence ?? 0,
+        explanation: a.reasoning_summary ?? "",
+        status: a.review_status,
+      };
+    })
+    .sort((a, b) => a.questionNumber - b.questionNumber);
+  return {
+    progress,
+    submission,
+    answers,
+    maximum: group.reduce((sum, q) => sum + q.max_score, 0),
   };
 }
