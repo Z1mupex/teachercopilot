@@ -3,7 +3,7 @@
 Teacher workspace using Next.js 16 App Router, React, strict TypeScript, Tailwind
 CSS v4, shadcn/ui conventions, Zod, lucide-react and Supabase cookie-based SSR auth.
 
-**Prompts 0–14 are implemented.** Authentication and the protected application
+Authentication and the protected application
 shell are ready. PostgreSQL has 11 application tables with teacher ownership RLS,
 automatic profiles and two private Storage buckets. Teachers can create, view,
 edit and delete their classes with confirmation. Dashboard shows actual totals,
