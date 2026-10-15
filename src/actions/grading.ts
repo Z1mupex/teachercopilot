@@ -10,7 +10,7 @@ import {
   revisionSchema,
 } from "@/lib/grading/validation";
 import {
-  deleteBlob,
+  deleteBlobs,
   getBatch,
   GradingError,
   insertBatch,
@@ -63,13 +63,17 @@ export async function changeGradingPages(
   )
     return { error: "Проверьте список страниц и обновите проверку." };
   try {
-    let path: string | undefined;
-    if (parsed.data.command === "remove")
-      path = (await ownedPage(user.id, batchId, parsed.data.id)).page
-        .storage_path;
+    let paths: string[] = [];
+    if (parsed.data.command === "remove") {
+      const { page } = await ownedPage(user.id, batchId, parsed.data.id);
+      paths = [
+        page.storage_path,
+        ...(page.preview_storage_path ? [page.preview_storage_path] : []),
+      ];
+    }
     const { command, ...payload } = parsed.data;
     await manageUpload(batchId, revision, command, payload);
-    if (path) await deleteBlob(path);
+    await deleteBlobs(paths);
     revalidatePath("/grading");
     revalidatePath(`/grading/${batchId}`);
     revalidatePath("/dashboard");

@@ -1,7 +1,21 @@
 // Blobs remain local to this browser for retry/reopen. Keys include the batch UUID;
 // credentials, student identities and original local filenames are never stored.
 const DATABASE = "teacher-copilot-upload-pages";
-type LocalPage = { key: string; batch: string; id: string; blob: Blob };
+import type { ScanQuality } from "@/lib/grading/scan-analysis";
+export type LocalPageMetadata = {
+  source?: "batch_scan";
+  fingerprint?: string;
+  quality?: ScanQuality;
+  uploadToken?: string;
+  replacementVersion?: string;
+};
+type LocalPage = {
+  key: string;
+  batch: string;
+  id: string;
+  blob: Blob;
+  metadata?: LocalPageMetadata;
+};
 
 async function database() {
   return new Promise<IDBDatabase>((resolve, reject) => {
@@ -13,7 +27,12 @@ async function database() {
       reject(new Error("Браузер не смог сохранить страницы для повтора."));
   });
 }
-export async function saveLocalPage(batch: string, id: string, blob: Blob) {
+export async function saveLocalPage(
+  batch: string,
+  id: string,
+  blob: Blob,
+  metadata?: LocalPageMetadata,
+) {
   const db = await database();
   try {
     await new Promise<void>((resolve, reject) => {
@@ -23,6 +42,7 @@ export async function saveLocalPage(batch: string, id: string, blob: Blob) {
         batch,
         id,
         blob,
+        metadata,
       } satisfies LocalPage);
       tx.oncomplete = () => resolve();
       tx.onerror = () =>

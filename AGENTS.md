@@ -70,7 +70,9 @@ This block is written and re-added by `next dev` — verify at `node_modules/nex
   private/no-store. Bundle local Noto Sans/Math fonts, keep each variant on a new A4 page.
 - AI audit metadata must exclude secrets and request/answer text. Enforce the hourly
   quota through private append-only reservations, independently of public audit rows.
-- Grading upload is one page per submission, with optional class/worksheet associations.
+- Grading upload supports up to 100 pages per batch and 10 pages per submission,
+  with optional class/worksheet associations. Append reserves one provisional
+  submission per page; owned confirm_scan_review groups pages before first claim.
   PDF.js renders pages locally; browser canvas and server Sharp normalize JPEGs.
   Keep private images behind ownership-checked routes. Page order and completion use
   manage_grading_upload with a batch lock and revision checks; ready requires stored blobs.
@@ -118,13 +120,28 @@ This block is written and re-added by `next dev` — verify at `node_modules/nex
   Data-driven event cards never automatically change timer/sides/scores. Optional
   debate_topics AI uses the existing server-only structured service and private
   quota; never send participant names or grading data. Topic application is explicit.
-- Batch Scan is an owned /grading/[batchId]/scan page using the existing upload
-  hook, RPC and private JPEG route. Camera permission is explicit, video-only;
-  stop tracks on hide, exit and stale permission responses. Preserve the full
-  frame, bound to MAX_EDGE and normalize through canvasJpeg and server Sharp.
-  Persist confirmed captures locally before network work; immutable capture IDs
-  and authoritative refresh recover lost acknowledgements without duplicates.
-  Review/rotation precede upload. Never auto-start recognition or grading.
+- Batch Scan uses the owned scan page, upload hook, RPC and private JPEG route.
+  Permission is explicit/video-only; stop tracks on hide, exit and stale responses.
+  Auto capture requires a stable sheet, hash comparison and removal before rearm.
+  Preserve full frames, normalize via canvasJpeg/Sharp, persist to IndexedDB before
+  background upload and use stable capture/upload tokens for acknowledgement recovery.
+  Mandatory scan-review checks every current image version and grouping before ready;
+  replacement/rotation resets that acknowledgement. Quality flags are heuristics,
+  duplicate warnings never silently delete similar works. Reparent pages only through
+  confirm_scan_review under owned batch lock/revision, never after first claim.
+  Private stored previews and bounded server image cache require fresh ownership
+  and retention-marker checks; delete both blobs through Storage API. No capture,
+  grouping or scan review starts recognition/grading.
+- Multi-page recognition reads each owned image separately and assigns provenance
+  server-side. Merge continuations before scoring; never add partial page scores.
+  Crops must reference an owned source page; conflicting/mixed answers require review.
+- Teacher Calibration selects 3–5 sample works before first claim (all if fewer).
+  Samples always require teacher review, including fast mode; remaining claims are
+  blocked until explicit approval of per-batch rules. Changed sample scores require
+  a comment saved atomically with answer revision. Generate transient rule proposals
+  from explicit comments/points/key criteria only, never student text/images/names.
+  Profiles have owned revision-checked approval and freeze before remaining claims;
+  no auto launch, global teacher training, key/max-score edits or MCQ rule overrides.
 - Hardening rejects direct final states/scores even before recognition. Batch counters
   are workflow-only; upload, claim and finalization derive them from actual rows.
   Private Storage enforces 6 MiB JPEG submissions and 30 MiB PDF/JPEG/PNG worksheets.

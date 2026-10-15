@@ -56,7 +56,8 @@ export function BatchForm({
       </div>
       <p className="rounded-xl bg-secondary p-4 text-sm leading-6 text-muted-foreground">
         Можно загрузить любые работы учеников, в том числе созданные вне Teacher
-        Copilot. Одна страница — одна работа.
+        Copilot. После загрузки можно объединить несколько листов одного ученика
+        в одну работу.
       </p>
       {state.error && (
         <p role="alert" className="text-sm text-destructive">

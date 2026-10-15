@@ -1,6 +1,5 @@
 # Database and private files
 
-Migrations through prompt 14 are applied to project `vzskniyornxdrusuzovp` (TeacherCopilot).
 Local migration files, in execution order:
 
 1. `migrations/20261005164853_teacher_copilot_schema.sql`
@@ -388,3 +387,49 @@ Rollback probes covered all three presets, acknowledgement/revision/ownership
 checks, two-job concurrency, frozen settings, unsafe/blank auto rejection, atomic
 stale groups, duplicates, whole-selection changes, overrides and finalization.
 Browser verification used synthetic fixtures only. No auth bypass or new secrets.
+
+## Automatic scanning, multi-page works and teacher calibration
+
+Migrations `20261014163959`, `20261014170949` and `20261014173019` add owned
+capture metadata, private preview paths, mandatory scan review and per-batch
+calibration. Existing pages remain compatible. Up to 100 pages can be captured;
+`confirm_scan_review` groups them into works of up to 10 pages with contiguous
+page indexes. The transaction checks the batch revision, every current image
+version and live Storage objects before changing any rows. Page IDs and Storage
+paths stay stable during grouping. Reparenting is forbidden outside this owned,
+unstarted upload transaction. Removing a page reindexes its remaining siblings.
+
+Captures are persisted to batch-scoped IndexedDB before background upload.
+Stable upload tokens recover lost acknowledgements without silently duplicating
+or replacing images. Server Sharp creates normalized JPEGs and 640px previews
+once. Exact content hashes and perceptual hashes produce duplicate warnings;
+similar legitimate works are never silently discarded. Original and preview
+routes verify ownership and image-removal markers before using a bounded private
+60-second server cache. Browser responses remain private/no-store. Deletion and
+retention remove both images through the Storage API.
+
+Student recognition processes one image per request so source-page identity is
+assigned by the server. Continuations are merged and graded as one answer, never
+by adding partial page scores. Mixed identities and conflicting short/numeric
+answers remain manual. The existing exact-attempt lease and private quota cover
+the whole work; provider limits can require an explicit retry. No capture, scan
+review, grouping or key confirmation starts recognition automatically.
+
+`configure_grading_calibration` selects 3–5 owned works (all works if fewer than
+three). Until a profile is approved, claims for remaining works are blocked and
+every sample answer requires a teacher decision even in fast mode.
+`save_calibration_feedback` atomically validates answer revisions, saves the
+decision and records its explanation; changed scores require an explanation.
+Feedback rows have owned RLS and guarded writes. Rule generation receives only
+question criteria, proposed/final points and explicit teacher explanations, with
+no student names, images or transcriptions. `grading_calibration` shares the
+existing private non-grading quota; proposals are transient.
+
+`approve_grading_calibration` requires all sample answers to be teacher-reviewed,
+checks the batch revision and whitelists question IDs before freezing the
+validated profile. Rules may refine scoring within existing maxima but never
+alter keys or multiple-choice scores. Approval does not start AI. Remaining
+works use the approved rules only after a separate teacher launch. Sample scores
+are retained, all preliminary results remain overridable and finalization remains
+explicit. Types preserve nullable `p_variant`, `p_student_name` and calibration
+feedback `p_score` when regenerated.

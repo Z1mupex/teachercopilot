@@ -48,6 +48,8 @@ export function WorkReviewScreen({ initial }: { initial: WorkReview }) {
     whole: boolean;
   } | null>(null);
   const detail = useRef<HTMLDivElement>(null);
+  const [pageChoice, setPageChoice] = useState<string | null>(null);
+  const page = s?.pages.find((item) => item.id === pageChoice) ?? s?.pages[0];
   useEffect(() => {
     if (detailId) detail.current?.focus();
   }, [detailId]);
@@ -73,11 +75,13 @@ export function WorkReviewScreen({ initial }: { initial: WorkReview }) {
     if (blocked) return;
     setSelectedIds([]);
     setDetailId(null);
+    setPageChoice(null);
     const result = await r.load(id);
-    if (focusIssue && result)
-      setDetailId(
-        result.answers.find((a) => a.status === "needs_review")?.id ?? null,
-      );
+    if (focusIssue && result) {
+      const issue = result.answers.find((a) => a.status === "needs_review");
+      setDetailId(issue?.id ?? null);
+      setPageChoice(issue?.pageId ?? null);
+    }
   }
   async function nextIssue() {
     if (blocked) return;
@@ -87,6 +91,7 @@ export function WorkReviewScreen({ initial }: { initial: WorkReview }) {
       .find((a) => a.status === "needs_review");
     if (answer) {
       setDetailId(answer.id);
+      setPageChoice(answer.pageId);
       return;
     }
     const ordered = [
@@ -95,7 +100,10 @@ export function WorkReviewScreen({ initial }: { initial: WorkReview }) {
     ];
     const other = ordered.find((a) => a.status === "needs_review");
     if (other) await choosePaper(other.id, true);
-    else if (needs[0]) setDetailId(needs[0].id);
+    else if (needs[0]) {
+      setDetailId(needs[0].id);
+      setPageChoice(needs[0].pageId);
+    }
   }
   function requestBulk(whole: boolean) {
     const list = whole
@@ -158,6 +166,18 @@ export function WorkReviewScreen({ initial }: { initial: WorkReview }) {
       {r.notice && (
         <p role="status" className="text-sm text-primary">
           {r.notice}
+        </p>
+      )}
+      {p.calibration.enabled && !p.calibration.profile && (
+        <p className="rounded-lg border bg-card p-4 text-sm">
+          Пробная проверка: подтвердите каждый ответ выбранных работ. Изменения
+          баллов поясните — из этих примеров будут предложены правила.{" "}
+          <Link
+            href={`/grading/${p.id}/process`}
+            className="text-primary underline"
+          >
+            Вернуться к пробной проверке
+          </Link>
         </p>
       )}
       <div className="flex flex-wrap items-end justify-between gap-4">
@@ -245,9 +265,9 @@ export function WorkReviewScreen({ initial }: { initial: WorkReview }) {
             >
               <div className="flex items-center justify-between gap-3 border-b px-4 py-3">
                 <h3 className="text-sm font-semibold">Оригинал работы</h3>
-                {s.pageId && (
+                {page && (
                   <a
-                    href={`/grading/${p.id}/pages/${s.pageId}`}
+                    href={`/grading/${p.id}/pages/${page.id}`}
                     target="_blank"
                     rel="noreferrer"
                     className="studio-text-button"
@@ -256,12 +276,30 @@ export function WorkReviewScreen({ initial }: { initial: WorkReview }) {
                   </a>
                 )}
               </div>
-              {s.pageId ? (
+              {s.pages.length > 1 && (
+                <label className="flex flex-wrap items-center gap-2 border-b p-3 text-xs">
+                  <span>Лист работы</span>
+                  <select
+                    className={selectClass}
+                    value={page?.id ?? ""}
+                    disabled={blocked}
+                    onChange={(e) => setPageChoice(e.target.value)}
+                  >
+                    {s.pages.map((item) => (
+                      <option key={item.id} value={item.id}>
+                        Лист {item.number} из {s.pages.length}
+                      </option>
+                    ))}
+                  </select>
+                </label>
+              )}
+              {page ? (
                 <div className="studio-paper-view aspect-[3/4] max-h-[75vh]">
                   <PagePreview
-                    key={s.pageId}
-                    src={`/grading/${p.id}/pages/${s.pageId}`}
-                    label={`Оригинал работы № ${s.number}`}
+                    key={page.id}
+                    src={`/grading/${p.id}/pages/${page.id}`}
+                    previewSrc={`/grading/${p.id}/pages/${page.id}?preview=1`}
+                    label={`Оригинал работы № ${s.number} · лист ${page.number}`}
                   />
                 </div>
               ) : (
@@ -404,11 +442,12 @@ export function WorkReviewScreen({ initial }: { initial: WorkReview }) {
                                 type="button"
                                 className="min-h-8 text-left text-sm font-semibold text-primary"
                                 disabled={blocked}
-                                onClick={() =>
+                                onClick={() => {
+                                  setPageChoice(answer.pageId);
                                   setDetailId(
                                     detailId === answer.id ? null : answer.id,
-                                  )
-                                }
+                                  );
+                                }}
                               >
                                 Задание {answer.questionNumber}
                               </button>
@@ -485,9 +524,9 @@ export function WorkReviewScreen({ initial }: { initial: WorkReview }) {
                     busy={blocked}
                     closed={closed}
                     hideOriginal
-                    onSave={async (command, score) => {
+                    onSave={async (command, score, comment) => {
                       setSelectedIds([]);
-                      await r.save(selected.id, command, score);
+                      await r.save(selected.id, command, score, comment);
                     }}
                   />
                 </div>

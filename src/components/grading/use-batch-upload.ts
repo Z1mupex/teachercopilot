@@ -7,6 +7,7 @@ import {
   readLocalPages,
   removeLocalPage,
   saveLocalPage,
+  type LocalPageMetadata,
 } from "@/lib/grading/local-pages";
 import {
   idSchema,
@@ -16,7 +17,7 @@ import {
 import type { LayoutCommand } from "@/lib/grading/validation";
 import type { GradingBatch, GradingPage, GradingResult } from "@/types/grading";
 
-type Local = { blob: Blob; url: string };
+type Local = { blob: Blob; url: string; metadata: LocalPageMetadata };
 type FileState = { id: string; name: string; status: string; error: boolean };
 export function useBatchUpload(initial: GradingBatch) {
   const [batch, setBatch] = useState(initial);
@@ -41,13 +42,13 @@ export function useBatchUpload(initial: GradingBatch) {
     setBatch(result.batch);
     return result.batch;
   }
-  function setLocal(id: string, blob: Blob) {
+  function setLocal(id: string, blob: Blob, metadata: LocalPageMetadata = {}) {
     if (!mounted.current) return;
     const old = localRef.current[id];
     if (old) URL.revokeObjectURL(old.url);
     localRef.current = {
       ...localRef.current,
-      [id]: { blob, url: URL.createObjectURL(blob) },
+      [id]: { blob, url: URL.createObjectURL(blob), metadata },
     };
     setLocals(localRef.current);
   }
@@ -74,7 +75,11 @@ export function useBatchUpload(initial: GradingBatch) {
           }
           if (
             current.current.pages.some(
-              (item) => item.id === page.id && item.status === "stored",
+              (item) =>
+                item.id === page.id &&
+                item.status === "stored" &&
+                (!page.metadata?.replacementVersion ||
+                  item.imageVersion === `${page.metadata.uploadToken}.jpg`),
             )
           ) {
             await removeLocalPage(initial.id, page.id);
@@ -83,6 +88,7 @@ export function useBatchUpload(initial: GradingBatch) {
           next[page.id] = {
             blob: page.blob,
             url: URL.createObjectURL(page.blob),
+            metadata: page.metadata ?? {},
           };
         }
         if (cancelled) {
@@ -160,13 +166,28 @@ export function useBatchUpload(initial: GradingBatch) {
           width: null,
           height: null,
           imageVersion: "local",
+          submissionId: id,
+          pageIndex: 0,
+          reviewed: false,
+          quality: localRef.current[id].metadata.quality ?? null,
+          contentHash: null,
+          perceptualHash: localRef.current[id].metadata.fingerprint ?? null,
         })),
     ];
   }
   async function reserve() {
     const known = new Set(current.current.pages.map((page) => page.id));
     const ids = Object.keys(localRef.current).filter((id) => !known.has(id));
-    if (ids.length) await command({ command: "append", ids });
+    if (ids.length)
+      await command({
+        command: "append",
+        ids,
+        ...(ids.some(
+          (id) => localRef.current[id].metadata.source === "batch_scan",
+        )
+          ? { source: "batch_scan" as const }
+          : {}),
+      });
   }
   async function prepare(selected: File[], targetId?: string) {
     if (targetId && selected.length !== 1)
@@ -183,8 +204,20 @@ export function useBatchUpload(initial: GradingBatch) {
           targetId ? 1 : MAX_PAGES - visiblePages().length,
           async (page) => {
             const id = targetId ?? page.id;
-            await saveLocalPage(initial.id, id, page.blob);
-            setLocal(id, page.blob);
+            const old = targetId
+              ? current.current.pages.find((p) => p.id === targetId)
+              : undefined;
+            const metadata: LocalPageMetadata = {
+              uploadToken: crypto.randomUUID(),
+              ...(current.current.scanReviewRequired
+                ? { source: "batch_scan" }
+                : {}),
+              ...(old?.status === "stored"
+                ? { replacementVersion: old.imageVersion }
+                : {}),
+            };
+            await saveLocalPage(initial.id, id, page.blob, metadata);
+            setLocal(id, page.blob, metadata);
             setPageErrors((previous) => {
               const next = { ...previous };
               delete next[id];
@@ -236,11 +269,21 @@ export function useBatchUpload(initial: GradingBatch) {
     const timeout = setTimeout(() => controller.abort(), 60000);
     try {
       const response = await fetch(
-        `/grading/${initial.id}/pages/${pageId}${rotate ? "?rotate=90" : ""}`,
+        `/grading/${initial.id}/pages/${pageId}${rotate ? "?rotate=90" : localRef.current[pageId]?.metadata.replacementVersion ? `?replace=1&version=${encodeURIComponent(localRef.current[pageId].metadata.replacementVersion!)}` : ""}`,
         {
           method: "POST",
           body,
-          headers: rotate ? {} : { "Content-Type": "image/jpeg" },
+          headers: rotate
+            ? {}
+            : {
+                "Content-Type": "image/jpeg",
+                ...(localRef.current[pageId]?.metadata.uploadToken
+                  ? {
+                      "X-Upload-Token":
+                        localRef.current[pageId].metadata.uploadToken!,
+                    }
+                  : {}),
+              },
           signal: controller.signal,
         },
       );
@@ -294,8 +337,9 @@ export function useBatchUpload(initial: GradingBatch) {
     const local = localRef.current[page.id];
     if (!local) throw new Error("Выберите изображение для этой работы заново.");
     const blob = await rotateLocalPage(local.blob);
-    await saveLocalPage(initial.id, page.id, blob);
-    setLocal(page.id, blob);
+    const metadata = { ...local.metadata, uploadToken: crypto.randomUUID() };
+    await saveLocalPage(initial.id, page.id, blob, metadata);
+    setLocal(page.id, blob, metadata);
   }
   async function remove(id: string) {
     if (!window.confirm("Удалить эту страницу из проверки?")) return;
@@ -312,7 +356,13 @@ export function useBatchUpload(initial: GradingBatch) {
   async function refresh() {
     const next = apply(await refreshGradingBatch(initial.id));
     for (const page of next.pages)
-      if (page.status === "stored" && localRef.current[page.id])
+      if (
+        page.status === "stored" &&
+        localRef.current[page.id] &&
+        (!localRef.current[page.id].metadata.replacementVersion ||
+          page.imageVersion ===
+            `${localRef.current[page.id].metadata.uploadToken}.jpg`)
+      )
         await forget(page.id);
   }
   async function saveCapture(page: { id: string; blob: Blob }) {
@@ -343,8 +393,36 @@ export function useBatchUpload(initial: GradingBatch) {
     await reserve();
     await pageRequest(page.id);
   }
+  async function queueCapture(
+    page: { id: string; blob: Blob },
+    metadata: LocalPageMetadata,
+  ) {
+    if (
+      !idSchema.safeParse(page.id).success ||
+      page.blob.type !== "image/jpeg" ||
+      !page.blob.size ||
+      page.blob.size > MAX_UPLOAD_BYTES
+    )
+      throw new Error("Нужен JPEG-снимок не больше 6 МБ.");
+    if (
+      !["draft", "uploading", "ready"].includes(current.current.status) ||
+      visiblePages().length >= MAX_PAGES
+    )
+      throw new Error("Нельзя добавить ещё один лист в эту проверку.");
+    const saved = {
+      ...metadata,
+      source: "batch_scan" as const,
+      uploadToken: metadata.uploadToken ?? crypto.randomUUID(),
+    };
+    await saveLocalPage(initial.id, page.id, page.blob, saved);
+    setLocal(page.id, page.blob, saved);
+  }
   const pages = [
-    ...batch.pages,
+    ...batch.pages.map((page) =>
+      localRef.current[page.id]?.metadata.replacementVersion
+        ? { ...page, status: "pending" as const, reviewed: false }
+        : page,
+    ),
     ...Object.keys(locals)
       .filter((id) => !batch.pages.some((page) => page.id === id))
       .map((id) => ({
@@ -353,6 +431,12 @@ export function useBatchUpload(initial: GradingBatch) {
         width: null,
         height: null,
         imageVersion: "local",
+        submissionId: id,
+        pageIndex: 0,
+        reviewed: false,
+        quality: locals[id].metadata.quality ?? null,
+        contentHash: null,
+        perceptualHash: locals[id].metadata.fingerprint ?? null,
       })),
   ];
   const stored = pages.filter((page) => page.status === "stored").length;
@@ -381,6 +465,7 @@ export function useBatchUpload(initial: GradingBatch) {
     move,
     refresh,
     saveCapture,
+    queueCapture,
     finish: async () => {
       await command({ command: "finish" });
     },

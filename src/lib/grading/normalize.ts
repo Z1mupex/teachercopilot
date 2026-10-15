@@ -6,24 +6,22 @@ import {
 } from "@/lib/grading/validation";
 
 export type NormalizedPage = { id: string; blob: Blob };
-export function canvasJpeg(canvas: HTMLCanvasElement): Promise<Blob> {
-  return new Promise((resolve, reject) =>
-    canvas.toBlob(
-      (blob) => {
-        if (!blob)
-          reject(new Error("Браузер не смог подготовить изображение."));
-        else if (blob.size > MAX_UPLOAD_BYTES)
-          reject(
-            new Error(
-              "Страница слишком большая. Уменьшите исходное изображение.",
-            ),
-          );
-        else resolve(blob);
-      },
-      "image/jpeg",
-      0.88,
-    ),
-  );
+export async function canvasJpeg(canvas: HTMLCanvasElement): Promise<Blob> {
+  for (const quality of [0.88, 0.8, 0.7, 0.6]) {
+    const blob = await new Promise<Blob>((resolve, reject) =>
+      canvas.toBlob(
+        (blob) => {
+          if (!blob)
+            reject(new Error("Браузер не смог подготовить изображение."));
+          else resolve(blob);
+        },
+        "image/jpeg",
+        quality,
+      ),
+    );
+    if (blob.size <= Math.min(MAX_UPLOAD_BYTES, 3 * 1024 * 1024)) return blob;
+  }
+  throw new Error("Страница слишком большая. Уменьшите исходное изображение.");
 }
 export async function rotateLocalPage(blob: Blob) {
   const bitmap = await createImageBitmap(blob);

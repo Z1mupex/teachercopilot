@@ -69,7 +69,8 @@ export function BatchUpload({ initial }: { initial: GradingBatch }) {
         <div>
           <h2 className="text-lg font-semibold">Работы учеников</h2>
           <p className="mt-1 text-sm text-muted-foreground">
-            Загружено {stored} / {pages.length}. Одна страница — одна работа.
+            Загружено {stored} / {pages.length} листов. Работ:{" "}
+            {new Set(pages.map((page) => page.submissionId)).size}.
           </p>
         </div>
         <button
@@ -86,6 +87,14 @@ export function BatchUpload({ initial }: { initial: GradingBatch }) {
           max={Math.max(1, pages.length)}
         />
       </div>
+      {editable && pages.length > 0 && (
+        <Link
+          href={`/grading/${batch.id}/scan-review`}
+          className={secondaryButtonClass}
+        >
+          Просмотреть листы и объединить в работы
+        </Link>
+      )}
       {batch.status === "ready" && (
         <p
           role="status"
@@ -201,10 +210,15 @@ export function BatchUpload({ initial }: { initial: GradingBatch }) {
           <article
             key={page.id}
             className="min-w-0 overflow-hidden rounded-2xl border bg-card"
-            aria-label={`Работа ${index + 1}`}
+            aria-label={`Лист ${index + 1}`}
           >
             <div className="flex items-center justify-between gap-3 border-b p-4">
-              <h3 className="font-semibold">Работа {index + 1}</h3>
+              <h3 className="font-semibold">
+                Лист {index + 1} · работа{" "}
+                {Array.from(new Set(pages.map((p) => p.submissionId))).indexOf(
+                  page.submissionId,
+                ) + 1}
+              </h3>
               <span
                 className={`text-xs ${pageErrors[page.id] ? "text-destructive" : "text-muted-foreground"}`}
               >
@@ -326,7 +340,8 @@ export function BatchUpload({ initial }: { initial: GradingBatch }) {
               busy ||
               pages.length === 0 ||
               stored !== pages.length ||
-              batch.status === "ready"
+              batch.status === "ready" ||
+              (batch.scanReviewRequired && pages.some((page) => !page.reviewed))
             }
             onClick={() => run(finish)}
           >

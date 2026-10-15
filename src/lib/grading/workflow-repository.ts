@@ -9,6 +9,7 @@ import type { GradingProgress, ReviewSlice } from "@/types/grading-workflow";
 import type { WorkReview, ReviewAnswer } from "@/types/grading-workflow";
 import { readAllRows } from "@/lib/database/read-all-rows";
 import { parseStoredAutonomy, legacyAutonomy } from "@/lib/grading/autonomy";
+import { calibrationProfileSchema } from "@/lib/grading/calibration-schema";
 
 export const REVIEW_PAGE_SIZE = 40;
 export function workflowError(error: { code?: string }) {
@@ -33,7 +34,7 @@ export async function getGradingProgress(
   const { data: b, error } = await client
     .from("grading_batches")
     .select(
-      "id,title,status,answer_key_confirmed_at,processed_submissions,grading_started_at,grading_preferences,autonomy_config,updated_at",
+      "id,title,status,answer_key_confirmed_at,processed_submissions,grading_started_at,grading_preferences,autonomy_config,updated_at,calibration_enabled,calibration_samples,calibration_profile",
     )
     .eq("id", batchId)
     .eq("teacher_id", teacherId)
@@ -44,7 +45,7 @@ export async function getGradingProgress(
     client
       .from("submissions")
       .select(
-        "id,status,student_name,variant_id,grading_lease_until,grading_error,proposed_score,final_score,max_score,upload_index,created_at,submission_pages(id)",
+        "id,status,student_name,variant_id,grading_lease_until,grading_error,proposed_score,final_score,max_score,upload_index,created_at,submission_pages(id,page_index)",
         { count: "exact" },
       )
       .eq("batch_id", batchId)
@@ -81,6 +82,14 @@ export async function getGradingProgress(
     answers: counts[0].count!,
     needsReview: counts[1].count!,
     teacherReviewed: counts[2].count!,
+    calibration: {
+      enabled: b.calibration_enabled,
+      samples: b.calibration_samples,
+      profile: b.calibration_profile
+        ? calibrationProfileSchema.parse(b.calibration_profile)
+        : null,
+      revision: b.updated_at,
+    },
     autonomy: {
       config: b.grading_preferences
         ? parseStoredAutonomy(b.grading_preferences)
@@ -110,7 +119,12 @@ export async function getGradingProgress(
         proposedScore: s.proposed_score,
         finalScore: s.final_score,
         maxScore: s.max_score,
-        pageId: s.submission_pages[0]?.id ?? null,
+        pageId:
+          s.submission_pages.sort((a, b) => a.page_index - b.page_index)[0]
+            ?.id ?? null,
+        pages: s.submission_pages
+          .sort((a, b) => a.page_index - b.page_index)
+          .map((p) => ({ id: p.id, number: p.page_index + 1 })),
       })),
   };
 }
@@ -121,6 +135,7 @@ const storedAnswerSchema = z.object({
   flags: z.array(z.string()).default([]),
   crop: cropSchema.nullable().default(null),
   teacher_unreadable: z.boolean().default(false),
+  page_id: z.uuid().nullable().optional(),
 });
 export async function getReviewSlice(
   teacherId: string,
@@ -136,7 +151,10 @@ export async function getReviewSlice(
   const client = await createClient();
   let query = client
     .from("submission_answers")
-    .select("*,submissions!inner(id,batch_id)", { count: "exact" })
+    .select(
+      "*,submissions!inner(id,batch_id),grading_calibration_feedback(comment)",
+      { count: "exact" },
+    )
     .eq("submissions.batch_id", batchId)
     .order("created_at")
     .order("id");
@@ -175,7 +193,10 @@ export async function getReviewSlice(
         submissionId: s.id,
         submissionNumber: s.number,
         studentName: s.studentName,
-        pageId: s.pageId,
+        pageId:
+          recognized.page_id && s.pages.some((p) => p.id === recognized.page_id)
+            ? recognized.page_id
+            : s.pageId,
         questionNumber: q.number,
         question: q.question,
         text: recognized.text,
@@ -188,6 +209,11 @@ export async function getReviewSlice(
         confidence: a.confidence ?? 0,
         explanation: a.reasoning_summary ?? "",
         status: a.review_status,
+        calibrationSample:
+          progress.calibration.enabled &&
+          !progress.calibration.profile &&
+          progress.calibration.samples.includes(s.id),
+        calibrationComment: a.grading_calibration_feedback?.comment ?? "",
       };
     }),
   };
@@ -227,7 +253,7 @@ export async function getWorkReview(
   const rows = await readAllRows("work-answers", (from, to) =>
     client
       .from("submission_answers")
-      .select("*", { count: "exact" })
+      .select("*,grading_calibration_feedback(comment)", { count: "exact" })
       .eq("submission_id", submission.id)
       .order("id")
       .range(from, to),
@@ -253,7 +279,11 @@ export async function getWorkReview(
         submissionId: submission.id,
         submissionNumber: submission.number,
         studentName: submission.studentName,
-        pageId: submission.pageId,
+        pageId:
+          recognized.page_id &&
+          submission.pages.some((p) => p.id === recognized.page_id)
+            ? recognized.page_id
+            : submission.pageId,
         questionNumber: q.number,
         question: q.question,
         text: recognized.text,
@@ -266,6 +296,11 @@ export async function getWorkReview(
         confidence: a.confidence ?? 0,
         explanation: a.reasoning_summary ?? "",
         status: a.review_status,
+        calibrationSample:
+          progress.calibration.enabled &&
+          !progress.calibration.profile &&
+          progress.calibration.samples.includes(submission.id),
+        calibrationComment: a.grading_calibration_feedback?.comment ?? "",
       };
     })
     .sort((a, b) => a.questionNumber - b.questionNumber);

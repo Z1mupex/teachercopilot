@@ -2,6 +2,10 @@ import type { QuestionInput } from "@/types/worksheets";
 import { type GradingFlag } from "@/lib/grading/policy";
 import type { RecognizedAnswer } from "@/lib/grading/grading-validation";
 import {
+  calibrationInstructions,
+  type CalibrationProfile,
+} from "@/lib/grading/calibration-schema";
+import {
   defaultSettings,
   gradingSettings,
   type GradingSettings,
@@ -103,6 +107,7 @@ export function gradeRecognizedAnswer(
   question: QuestionInput,
   recognized?: RecognizedAnswer,
   settings: GradingSettings = gradingSettings(defaultSettings),
+  calibration: CalibrationProfile | null = null,
 ): GradedAnswer {
   const flags = new Set<GradingFlag>(recognized?.flags ?? ["missing"]);
   let confidence = recognized?.confidence ?? 0;
@@ -136,7 +141,10 @@ export function gradeRecognizedAnswer(
           ? "Набор выбранных вариантов совпадает с ключом."
           : "Набор выбранных вариантов отличается от ключа.";
       }
-    } else if (question.type === "numeric") {
+    } else if (
+      question.type === "numeric" &&
+      !calibrationInstructions(calibration, question.id).length
+    ) {
       const value =
         !settings.fraction_equivalence && /[\/½¼¾]/u.test(text ?? "")
           ? null
@@ -167,12 +175,19 @@ export function gradeRecognizedAnswer(
       }
     } else if (
       question.type === "short_answer" &&
+      !calibrationInstructions(calibration, question.id).length &&
       shortAnswerMatches(text ?? "", question.expected_answer, settings)
     ) {
       score = question.max_score;
       explanation = "Ответ совпадает с ключом по выбранным правилам сравнения.";
     } else {
       flags.add("ai_judgment");
+      if (
+        question.type === "numeric" &&
+        !settings.fraction_equivalence &&
+        /[\/½¼¾]/u.test(text ?? "")
+      )
+        flags.add("comparison_mismatch");
       if (question.type === "short_answer") {
         const actual = normalizeText(text ?? ""),
           expected = normalizeText(question.expected_answer);
@@ -253,6 +268,7 @@ export function gradeSubmission(
   questions: QuestionInput[],
   answers: RecognizedAnswer[],
   settings: GradingSettings = gradingSettings(defaultSettings),
+  calibration: CalibrationProfile | null = null,
 ) {
   const expected = new Set(questions.map((question) => question.id));
   const byId = new Map<string, RecognizedAnswer>();
@@ -262,6 +278,11 @@ export function gradeSubmission(
     byId.set(answer.question_id, answer);
   }
   return questions.map((question) =>
-    gradeRecognizedAnswer(question, byId.get(question.id), settings),
+    gradeRecognizedAnswer(
+      question,
+      byId.get(question.id),
+      settings,
+      calibration,
+    ),
   );
 }

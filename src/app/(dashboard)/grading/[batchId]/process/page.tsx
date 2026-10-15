@@ -37,6 +37,17 @@ export default async function Page({
         ...gradingSettings(preferences.settings),
         mode: preferences.settings.ai_preset,
       }}
+      calibrationQuestions={[
+        { label: "Вариант 1", questions: key.document.questions },
+        ...(key.document.variants ?? []),
+      ].flatMap((group) =>
+        group.questions
+          .filter((q) => q.type !== "multiple_choice")
+          .map((q) => ({
+            id: q.id,
+            label: `${group.label} · задание ${group.questions.indexOf(q) + 1}: ${q.prompt.slice(0, 100)}`,
+          })),
+      )}
     />
   );
 }

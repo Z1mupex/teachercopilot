@@ -6,6 +6,7 @@ import { idSchema } from "@/lib/grading/validation";
 import {
   reviewInputSchema,
   bulkReviewSchema,
+  calibrationFeedbackSchema,
 } from "@/lib/grading/grading-validation";
 import {
   getReviewSlice,
@@ -55,9 +56,10 @@ export async function POST(request: Request, { params }: Context) {
       .union([
         reviewInputSchema,
         bulkReviewSchema,
+        calibrationFeedbackSchema,
         z.object({ command: z.literal("finalize") }).strict(),
       ])
-      .parse(await readWorkflowJson(request));
+      .parse(await readWorkflowJson(request, 16384));
     const client = await createClient({ writable: true });
     const { error } =
       input.command === "finalize"
@@ -69,13 +71,22 @@ export async function POST(request: Request, { params }: Context) {
               p_answers: input.answers,
               p_whole_paper: input.whole_paper,
             })
-          : await client.rpc("review_grading_answer", {
-              p_batch: batchId,
-              p_answer: input.answer_id,
-              p_revision: input.revision,
-              p_command: input.command,
-              ...(input.command === "score" ? { p_score: input.score } : {}),
-            });
+          : input.command === "calibration"
+            ? await client.rpc("save_calibration_feedback", {
+                p_batch: batchId,
+                p_answer: input.answer_id,
+                p_revision: input.revision,
+                p_command: input.decision,
+                p_score: input.score ?? null,
+                p_comment: input.comment,
+              })
+            : await client.rpc("review_grading_answer", {
+                p_batch: batchId,
+                p_answer: input.answer_id,
+                p_revision: input.revision,
+                p_command: input.command,
+                ...(input.command === "score" ? { p_score: input.score } : {}),
+              });
     if (error) workflowError(error);
     for (const path of [
       "/grading",

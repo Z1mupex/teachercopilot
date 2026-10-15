@@ -44,9 +44,11 @@ export function ReviewAnswerCard({
   onSave: (
     command: "confirm" | "score" | "unreadable",
     score?: number,
+    comment?: string,
   ) => Promise<void>;
 }) {
   const [full, setFull] = useState(!answer.crop);
+  const [comment, setComment] = useState(answer.calibrationComment ?? "");
   const [score, setScore] = useState(
     String(answer.finalScore ?? answer.proposedScore ?? ""),
   );
@@ -57,6 +59,10 @@ export function ReviewAnswerCard({
     Number.isFinite(numeric) &&
     numeric >= 0 &&
     numeric <= answer.question.max_score;
+  const explained =
+    !answer.calibrationSample ||
+    numeric === answer.proposedScore ||
+    !!comment.trim();
   const original = "/grading/" + batchId + "/pages/" + answer.pageId;
   const src = full
     ? original
@@ -235,10 +241,26 @@ export function ReviewAnswerCard({
             <fieldset disabled={busy} className="mt-6 border-t pt-5">
               <legend className="sr-only">Решение учителя</legend>
               <p className="mb-4 text-sm font-bold">Решение учителя</p>
+              {answer.calibrationSample && (
+                <label className="mb-4 block space-y-2 text-sm">
+                  <span>Пример оценивания · почему такой балл</span>
+                  <textarea
+                    className="min-h-24 w-full rounded border bg-background p-3 text-sm"
+                    maxLength={1000}
+                    value={comment}
+                    onChange={(e) => setComment(e.target.value)}
+                    placeholder="Например: верный метод даёт 1 балл, за ошибку в конечном ответе снимаю второй."
+                  />
+                  <span className="block text-xs text-muted-foreground">
+                    Пояснение требуется при изменении балла. По нему будут
+                    предложены правила этой проверки.
+                  </span>
+                </label>
+              )}
               <Button
                 className="w-full"
                 disabled={answer.proposedScore === null}
-                onClick={() => void onSave("confirm")}
+                onClick={() => void onSave("confirm", undefined, comment)}
               >
                 <Check className="size-4" aria-hidden="true" />
                 Подтвердить оценку · {answer.proposedScore ?? "—"}
@@ -263,8 +285,8 @@ export function ReviewAnswerCard({
                 <button
                   type="button"
                   className={secondaryButtonClass}
-                  disabled={!valid}
-                  onClick={() => void onSave("score", numeric)}
+                  disabled={!valid || !explained}
+                  onClick={() => void onSave("score", numeric, comment)}
                 >
                   <PenLine className="size-3.5" aria-hidden="true" />
                   Сохранить
@@ -276,10 +298,15 @@ export function ReviewAnswerCard({
                   знаков после запятой.
                 </p>
               )}
+              {valid && !explained && (
+                <p role="alert" className="mt-2 text-sm text-destructive">
+                  Объясните изменение балла для пробной проверки.
+                </p>
+              )}
               <button
                 type="button"
                 className="studio-text-button mt-4"
-                onClick={() => void onSave("unreadable")}
+                onClick={() => void onSave("unreadable", undefined, comment)}
               >
                 <ImageOff className="size-3.5" aria-hidden="true" />
                 Нечитаемо · 0 баллов

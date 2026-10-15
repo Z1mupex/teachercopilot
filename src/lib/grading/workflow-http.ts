@@ -21,7 +21,7 @@ export function assertSameOrigin(request: Request) {
   }
   if (!same) throw new GradingError("Недопустимый источник запроса.", 403);
 }
-export async function readWorkflowJson(request: Request) {
+export async function readWorkflowJson(request: Request,maxBytes=4096) {
   if (!request.headers.get("content-type")?.startsWith("application/json"))
     throw new GradingError("Нужен JSON.", 415);
   const reader = request.body?.getReader();
@@ -33,7 +33,7 @@ export async function readWorkflowJson(request: Request) {
       const { value, done } = await reader.read();
       if (done) break;
       length += value.length;
-      if (length > 4096) {
+      if (length > maxBytes) {
         await reader.cancel();
         throw new GradingError("Запрос слишком большой.", 413);
       }

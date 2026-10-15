@@ -6,6 +6,7 @@ import { cropSchema } from "@/lib/grading/grading-validation";
 import { idSchema } from "@/lib/grading/validation";
 import { privateHeaders, workflowResponse } from "@/lib/grading/workflow-http";
 import { removedImageResponse } from "@/lib/grading/removed-image";
+import { readPrivateImage } from "@/lib/grading/private-image";
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
 export async function GET(
@@ -23,29 +24,34 @@ export async function GET(
     const { data: a, error } = await client
       .from("submission_answers")
       .select(
-        "recognized_answer,submissions!inner(batch_id,submission_pages(storage_path,removed_submission_images(page_id)))",
+        "recognized_answer,submissions!inner(batch_id,submission_pages(id,page_index,storage_path,removed_submission_images(page_id)))",
       )
       .eq("id", answerId)
       .eq("submissions.batch_id", batchId)
       .maybeSingle();
     if (error || !a) throw new GradingError("Ответ недоступен.", 404);
-    if (a.submissions.submission_pages[0]?.removed_submission_images)
-      return removedImageResponse(privateHeaders);
     const recognized = a.recognized_answer;
-    const crop = cropSchema.parse(
+    const object =
       recognized && typeof recognized === "object" && !Array.isArray(recognized)
-        ? recognized.crop
-        : null,
+        ? recognized
+        : null;
+    const pages = a.submissions.submission_pages.sort(
+      (x, y) => x.page_index - y.page_index,
     );
-    const path = a.submissions.submission_pages[0]?.storage_path;
-    if (!path) throw new GradingError("Оригинал недоступен.", 404);
-    const { data: blob, error: downloadError } = await client.storage
-      .from("submission-files")
-      .download(path);
-    if (downloadError || !blob || blob.size > 6 * 1024 * 1024)
-      throw new GradingError("Оригинал недоступен.", 503);
-    const bytes = Buffer.from(await blob.arrayBuffer()),
-      metadata = await sharp(bytes, { limitInputPixels: 40000000 }).metadata();
+    const page = object?.page_id
+      ? pages.find((p) => p.id === object.page_id)
+      : pages.length === 1
+        ? pages[0]
+        : undefined;
+    if (!page)
+      throw new GradingError("Не удалось определить лист с ответом.", 422);
+    if (page.removed_submission_images)
+      return removedImageResponse(privateHeaders);
+    const crop = cropSchema.parse(object?.crop);
+    const bytes = await readPrivateImage(client, user.id, page.storage_path);
+    const metadata = await sharp(bytes, {
+      limitInputPixels: 40000000,
+    }).metadata();
     if (!metadata.width || !metadata.height)
       throw new GradingError("Неверное изображение.", 422);
     const left = Math.min(

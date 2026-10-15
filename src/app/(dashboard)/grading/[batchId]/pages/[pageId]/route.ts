@@ -5,6 +5,7 @@ import { storePage } from "@/lib/grading/page-storage";
 import { idSchema, MAX_UPLOAD_BYTES } from "@/lib/grading/validation";
 import sharp from "sharp";
 import { removedImageResponse } from "@/lib/grading/removed-image";
+import { readPrivateImage } from "@/lib/grading/private-image";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -43,17 +44,16 @@ export async function GET(request: Request, { params }: Context) {
     if (page.removed_submission_images) return removedImageResponse(headers);
     if (page.upload_status !== "stored")
       throw new GradingError("Страница ещё не загружена.", 404);
-    const { data, error } = await client.storage
-      .from("submission-files")
-      .download(page.storage_path);
-    if (error || !data)
-      throw new GradingError("Не удалось загрузить изображение.", 503);
-    if (data.size > MAX_UPLOAD_BYTES)
-      throw new GradingError("Страница превышает допустимый размер.", 413);
-    if (new URL(request.url).searchParams.get("preview") === "1") {
-      const preview = await sharp(Buffer.from(await data.arrayBuffer()), {
-        limitInputPixels: 40_000_000,
-      })
+    const isPreview = new URL(request.url).searchParams.get("preview") === "1";
+    const bytes = await readPrivateImage(
+      client,
+      user.id,
+      isPreview
+        ? (page.preview_storage_path ?? page.storage_path)
+        : page.storage_path,
+    );
+    if (isPreview && !page.preview_storage_path) {
+      const preview = await sharp(bytes, { limitInputPixels: 40_000_000 })
         .resize({
           width: 640,
           height: 640,
@@ -66,7 +66,7 @@ export async function GET(request: Request, { params }: Context) {
         headers: { ...headers, "Content-Type": "image/jpeg" },
       });
     }
-    return new Response(data, {
+    return new Response(new Uint8Array(bytes), {
       headers: { ...headers, "Content-Type": "image/jpeg" },
     });
   } catch (error) {
@@ -102,7 +102,22 @@ export async function POST(request: Request, { params }: Context) {
       { status: 403, headers },
     );
   try {
-    const rotation = new URL(request.url).searchParams.get("rotate") === "90";
+    const query = new URL(request.url).searchParams;
+    const rotation = query.get("rotate") === "90";
+    const replacementVersion =
+      query.get("replace") === "1"
+        ? (query.get("version") ?? undefined)
+        : undefined;
+    const uploadToken = request.headers.get("x-upload-token") ?? undefined;
+    if (uploadToken && !idSchema.safeParse(uploadToken).success)
+      throw new GradingError("Неверный идентификатор загрузки.", 422);
+    if (
+      query.get("replace") === "1" &&
+      (!uploadToken ||
+        !replacementVersion ||
+        !/^[0-9a-f-]{36}[.]jpg$/u.test(replacementVersion))
+    )
+      throw new GradingError("Обновите снимок перед заменой.", 422);
     if (!rotation && request.headers.get("content-type") !== "image/jpeg")
       throw new GradingError("Нужен нормализованный JPG.", 415);
     const reader = request.body?.getReader();
@@ -124,7 +139,15 @@ export async function POST(request: Request, { params }: Context) {
         reader.releaseLock();
       }
     }
-    await storePage(user.id, batchId, pageId, Buffer.concat(chunks), rotation);
+    await storePage(
+      user.id,
+      batchId,
+      pageId,
+      Buffer.concat(chunks),
+      rotation,
+      replacementVersion,
+      uploadToken,
+    );
     revalidatePath("/grading");
     revalidatePath(`/grading/${batchId}`);
     revalidatePath("/dashboard");

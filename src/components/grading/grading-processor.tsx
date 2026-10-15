@@ -27,6 +27,7 @@ import {
 } from "@/components/grading/autonomy-editor";
 import { autonomySchema, type AutonomyRules } from "@/lib/grading/autonomy";
 import { configureGradingAutonomy } from "@/actions/grading-autonomy";
+import { CalibrationPanel } from "@/components/grading/calibration-panel";
 const statusLabels: Record<string, string> = {
   uploaded: "Ожидает запуска",
   processing: "Обрабатывается",
@@ -40,16 +41,23 @@ export function GradingProcessor({
   variants,
   aiConfigured,
   defaultAutonomy,
+  calibrationQuestions,
 }: {
   initial: GradingProgress;
   variants: { id: string | null; label: string }[];
   aiConfigured: boolean;
   defaultAutonomy: AutonomyRules;
+  calibrationQuestions: { id: string; label: string }[];
 }) {
   const p = useGradingProcessor(initial, variants.length > 1),
     batch = p.progress;
   const pending = batch.submissions.filter(
-    (s) => canProcessSubmission(s, batch.observedAt) && s.status !== "failed",
+    (s) =>
+      canProcessSubmission(s, batch.observedAt) &&
+      s.status !== "failed" &&
+      (!batch.calibration.enabled ||
+        batch.calibration.profile ||
+        batch.calibration.samples.includes(s.id)),
   );
   const ready = pending.length > 0 && pending.every((s) => p.selections[s.id]);
   const closed = batch.status === "completed";
@@ -57,13 +65,14 @@ export function GradingProcessor({
     batch.autonomy.config ?? defaultAutonomy,
   );
   const [savingAutonomy, setSavingAutonomy] = useState(false);
+  const [calibrationBusy, setCalibrationBusy] = useState(false);
   const configured =
     batch.autonomy.frozen ||
     (!!batch.autonomy.config &&
       JSON.stringify(autonomySchema.safeParse(autonomy).data) ===
         JSON.stringify(autonomySchema.safeParse(batch.autonomy.config).data));
   async function saveAutonomy() {
-    if (savingAutonomy || p.running) return;
+    if (savingAutonomy || p.running || calibrationBusy) return;
     if (!autonomySchema.safeParse(autonomy).success) {
       p.setError("Проверьте порог confidence и параметры режима.");
       return;
@@ -99,6 +108,14 @@ export function GradingProcessor({
         <p className="mt-3 break-words text-muted-foreground">{batch.title}</p>
       </div>
       <GradingSteps current={2} batchId={batch.id} />
+      <CalibrationPanel
+        progress={batch}
+        questions={calibrationQuestions}
+        running={p.running || savingAutonomy}
+        aiConfigured={aiConfigured}
+        onRefresh={p.refresh}
+        onBusy={setCalibrationBusy}
+      />
       <section
         aria-label="Самостоятельность ИИ для этой проверки"
         className="space-y-4 rounded-lg border bg-card p-5 sm:p-6"
@@ -115,12 +132,16 @@ export function GradingProcessor({
             <AutonomyEditor
               value={autonomy}
               onChange={setAutonomy}
-              disabled={p.running || savingAutonomy}
+              disabled={p.running || savingAutonomy || calibrationBusy}
             />
             <Button
               onClick={saveAutonomy}
               disabled={
-                p.running || savingAutonomy || configured || !batch.confirmed
+                p.running ||
+                savingAutonomy ||
+                calibrationBusy ||
+                configured ||
+                !batch.confirmed
               }
             >
               {savingAutonomy
@@ -197,17 +218,23 @@ export function GradingProcessor({
               disabled={
                 !ready ||
                 p.running ||
+                calibrationBusy ||
                 !batch.confirmed ||
                 !aiConfigured ||
                 !configured ||
-                savingAutonomy
+                savingAutonomy ||
+                calibrationBusy
               }
               onClick={() => void p.run(pending.map((s) => s.id))}
             >
               <Play className="size-4" />
-              {batch.processed
-                ? "Продолжить обработку"
-                : "Начать распознавание"}
+              {batch.calibration.enabled && !batch.calibration.profile
+                ? "Начать пробную проверку"
+                : batch.calibration.profile
+                  ? "Проверить оставшиеся по утверждённым правилам"
+                  : batch.processed
+                    ? "Продолжить обработку"
+                    : "Начать распознавание"}
             </Button>
             <button
               type="button"
@@ -253,6 +280,10 @@ export function GradingProcessor({
                   ) : null}
                   <span className="break-words">
                     Работа № {s.number}
+                    {batch.calibration.samples.includes(s.id)
+                      ? " · Пробная"
+                      : ""}{" "}
+                    · {s.pages.length} листов
                     {s.studentName ? ` · ${s.studentName}` : ""}
                   </span>
                 </p>
@@ -277,6 +308,7 @@ export function GradingProcessor({
                   value={p.selections[s.id] ?? s.variantId ?? "base"}
                   disabled={
                     p.running ||
+                    calibrationBusy ||
                     !canProcessSubmission(s, batch.observedAt) ||
                     closed
                   }
@@ -311,11 +343,16 @@ export function GradingProcessor({
                       type="button"
                       disabled={
                         p.running ||
+                        calibrationBusy ||
                         !p.selections[s.id] ||
                         !aiConfigured ||
                         !batch.confirmed ||
+                        (batch.calibration.enabled &&
+                          !batch.calibration.profile &&
+                          !batch.calibration.samples.includes(s.id)) ||
                         !configured ||
-                        savingAutonomy
+                        savingAutonomy ||
+                        calibrationBusy
                       }
                       className={secondaryButtonClass}
                       onClick={() => void p.run([s.id])}

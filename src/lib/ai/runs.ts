@@ -9,6 +9,7 @@ export type AiPurpose =
   | "question_regeneration"
   | "answer_key_parsing"
   | "grading_summary"
+  | "grading_calibration"
   | "debate_topics"
   | "submission_grading";
 export type AiRunMetadata = {
@@ -19,6 +20,7 @@ export type AiRunMetadata = {
   total_tokens?: number;
   error_code?: string;
   question_count?: number;
+  page_count?: number;
 };
 
 export async function reserveAiRun(

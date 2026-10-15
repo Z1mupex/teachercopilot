@@ -1,6 +1,7 @@
 import type { QuestionInput } from "@/types/worksheets";
 import type { GradedAnswer } from "@/lib/grading/score";
 import type { AutonomyRules } from "@/lib/grading/autonomy";
+import type { CalibrationState } from "@/lib/grading/calibration-schema";
 
 export type SubmissionProgress = {
   id: string;
@@ -14,6 +15,7 @@ export type SubmissionProgress = {
   finalScore: number | null;
   maxScore: number | null;
   pageId: string | null;
+  pages: { id: string; number: number }[];
 };
 export type GradingProgress = {
   observedAt: string;
@@ -27,6 +29,7 @@ export type GradingProgress = {
   needsReview: number;
   teacherReviewed: number;
   autonomy: { config: AutonomyRules | null; frozen: boolean; revision: string };
+  calibration: CalibrationState;
 };
 export type ReviewAnswer = {
   id: string;
@@ -47,6 +50,8 @@ export type ReviewAnswer = {
   explanation: string;
   status: string;
   teacherUnreadable: boolean;
+  calibrationSample: boolean;
+  calibrationComment: string;
 };
 export type ReviewSlice = {
   answers: ReviewAnswer[];

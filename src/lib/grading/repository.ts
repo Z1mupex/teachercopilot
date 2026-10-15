@@ -6,6 +6,7 @@ import { createClient } from "@/lib/supabase/server";
 import type { BatchInput } from "@/lib/grading/validation";
 import type { GradingBatch } from "@/types/grading";
 import type { Json } from "@/types/database";
+import { scanQualitySchema } from "@/lib/grading/scan-validation";
 
 export class GradingError extends Error {
   constructor(
@@ -24,7 +25,7 @@ export async function getBatch(
   const { data, error } = await client
     .from("grading_batches")
     .select(
-      "id,title,status,updated_at,answer_key_confirmed_at,classes(name),worksheets!grading_batches_worksheet_id_teacher_id_fkey(title),submissions(id,upload_index,created_at,submission_pages(id,upload_status,width,height,storage_path))",
+      "id,title,status,updated_at,answer_key_confirmed_at,scan_review_required,classes(name),worksheets!grading_batches_worksheet_id_teacher_id_fkey(title),submissions(id,upload_index,created_at,submission_pages(id,page_index,upload_status,width,height,storage_path,scan_quality,scan_reviewed_at,content_hash,perceptual_hash))",
     )
     .eq("id", id)
     .eq("teacher_id", teacherId)
@@ -39,6 +40,7 @@ export async function getBatch(
     answerKeyConfirmedAt: data.answer_key_confirmed_at,
     className: data.classes?.name ?? null,
     worksheetTitle: data.worksheets?.title ?? null,
+    scanReviewRequired: data.scan_review_required,
     pages: data.submissions
       .sort(
         (a, b) =>
@@ -47,16 +49,26 @@ export async function getBatch(
           a.created_at.localeCompare(b.created_at),
       )
       .flatMap((submission) =>
-        submission.submission_pages.map((page) => ({
-          id: page.id,
-          status:
-            page.upload_status === "stored"
-              ? ("stored" as const)
-              : ("pending" as const),
-          width: page.width,
-          height: page.height,
-          imageVersion: page.storage_path.split("/").at(-1) ?? "",
-        })),
+        submission.submission_pages
+          .sort((a, b) => a.page_index - b.page_index)
+          .map((page) => ({
+            id: page.id,
+            status:
+              page.upload_status === "stored"
+                ? ("stored" as const)
+                : ("pending" as const),
+            width: page.width,
+            height: page.height,
+            imageVersion: page.storage_path.split("/").at(-1) ?? "",
+            submissionId: submission.id,
+            pageIndex: page.page_index,
+            reviewed: !!page.scan_reviewed_at,
+            quality: page.scan_quality
+              ? scanQualitySchema.parse(page.scan_quality)
+              : null,
+            contentHash: page.content_hash,
+            perceptualHash: page.perceptual_hash,
+          })),
       ),
   };
 }
@@ -179,25 +191,18 @@ export async function ownedPage(
   pageId: string,
 ) {
   const client = await createClient({ writable: true });
-  const { data: batch, error: batchError } = await client
-    .from("grading_batches")
-    .select("id,status,updated_at,processed_submissions")
-    .eq("id", batchId)
-    .eq("teacher_id", teacherId)
-    .maybeSingle();
-  if (batchError) throwDatabaseError("grading-page-owner", batchError);
-  if (!batch) throw new GradingError("Работа недоступна.", 404);
   const { data: page, error } = await client
     .from("submission_pages")
     .select(
-      "id,storage_path,upload_status,width,height,removed_submission_images(page_id),submissions!inner(batch_id)",
+      "id,storage_path,preview_storage_path,upload_status,width,height,removed_submission_images(page_id),submissions!inner(batch_id,grading_batches!inner(id,status,updated_at,processed_submissions,teacher_id))",
     )
     .eq("id", pageId)
     .eq("submissions.batch_id", batchId)
+    .eq("submissions.grading_batches.teacher_id", teacherId)
     .maybeSingle();
   if (error) throwDatabaseError("grading-page-read", error);
   if (!page) throw new GradingError("Работа недоступна.", 404);
-  return { client, batch, page };
+  return { client, batch: page.submissions.grading_batches, page };
 }
 
 export function assertEditable(batch: {
@@ -215,10 +220,12 @@ export function assertEditable(batch: {
 }
 
 export async function deleteBlob(path: string) {
+  return deleteBlobs([path]);
+}
+export async function deleteBlobs(paths: string[]) {
+  if (!paths.length) return;
   const client = await createClient({ writable: true });
-  const { error } = await client.storage
-    .from("submission-files")
-    .remove([path]);
+  const { error } = await client.storage.from("submission-files").remove(paths);
   if (error)
     throw new GradingError(
       "Страница удалена из проверки, но файл не удалось удалить из хранилища. Обратитесь к администратору.",

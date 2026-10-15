@@ -32,7 +32,7 @@ export async function cleanupCompletedImages(
       client
         .from("submission_pages")
         .select(
-          "id,storage_path,removed_submission_images(page_id),submissions!inner(batch_id)",
+          "id,storage_path,preview_storage_path,removed_submission_images(page_id),submissions!inner(batch_id)",
           { count: "exact" },
         )
         .eq("submissions.batch_id", batch.id)
@@ -42,11 +42,15 @@ export async function cleanupCompletedImages(
     );
     for (const page of pages) {
       if (page.removed_submission_images) continue;
-      if (!page.storage_path.startsWith(`${teacherId}/`))
+      const paths = [
+        page.storage_path,
+        ...(page.preview_storage_path ? [page.preview_storage_path] : []),
+      ];
+      if (paths.some((path) => !path.startsWith(`${teacherId}/`)))
         throw new Error("InvalidOwnedImagePath");
       const { error } = await client.storage
         .from("submission-files")
-        .remove([page.storage_path]);
+        .remove(paths);
       if (error)
         throwDatabaseError("privacy-storage-remove", { code: error.name });
       // Record only acknowledged removals. A lost response can be safely retried.

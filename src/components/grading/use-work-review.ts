@@ -89,12 +89,14 @@ export function useWorkReview(initial: WorkReview) {
     id: string,
     command: "confirm" | "score" | "unreadable",
     score?: number,
+    comment = "",
   ) {
     const answer = data.answers.find((a) => a.id === id);
     if (!answer) return;
     await mutate(
       {
-        command,
+        command: answer.calibrationSample ? "calibration" : command,
+        ...(answer.calibrationSample ? { decision: command, comment } : {}),
         answer_id: answer.id,
         revision: answer.revision,
         ...(command === "score" ? { score } : {}),

@@ -22,6 +22,7 @@ export const layoutSchema = z.discriminatedUnion("command", [
     .object({
       command: z.literal("append"),
       ids: z.array(idSchema).min(1).max(MAX_PAGES),
+      source: z.literal("batch_scan").optional(),
     })
     .strict(),
   z

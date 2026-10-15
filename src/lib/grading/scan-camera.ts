@@ -1,5 +1,10 @@
 import { canvasJpeg } from "@/lib/grading/normalize";
 import { MAX_EDGE } from "@/lib/grading/validation";
+import {
+  analyzeScan,
+  grayPixels,
+  perceptualHash,
+} from "@/lib/grading/scan-analysis";
 
 export const scanConstraints = (
   facing: "environment" | "user",
@@ -60,6 +65,26 @@ export async function captureScanFrame(video: HTMLVideoElement) {
     context.drawImage(video, 0, 0, canvas.width, canvas.height);
     return await canvasJpeg(canvas);
   } finally {
+    canvas.width = 0;
+    canvas.height = 0;
+  }
+}
+export async function inspectScanBlob(blob: Blob) {
+  const bitmap = await createImageBitmap(blob),
+    canvas = document.createElement("canvas");
+  canvas.width = 160;
+  canvas.height = 120;
+  try {
+    const ctx = canvas.getContext("2d", { willReadFrequently: true });
+    if (!ctx) throw new Error("Canvas недоступен.");
+    ctx.drawImage(bitmap, 0, 0, 160, 120);
+    const gray = grayPixels(ctx.getImageData(0, 0, 160, 120).data);
+    return {
+      fingerprint: perceptualHash(gray, 160, 120),
+      quality: analyzeScan(gray, 160, 120, bitmap.width, bitmap.height),
+    };
+  } finally {
+    bitmap.close();
     canvas.width = 0;
     canvas.height = 0;
   }

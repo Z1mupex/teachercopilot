@@ -141,6 +141,9 @@ export type Database = {
           answer_key_source: string | null;
           answer_key_worksheet_id: string | null;
           autonomy_config: Json | null;
+          calibration_enabled: boolean;
+          calibration_profile: Json | null;
+          calibration_samples: string[];
           class_id: string | null;
           completed_at: string | null;
           created_at: string;
@@ -149,6 +152,7 @@ export type Database = {
           grading_started_at: string | null;
           id: string;
           processed_submissions: number;
+          scan_review_required: boolean;
           status: string;
           teacher_id: string;
           title: string;
@@ -162,6 +166,9 @@ export type Database = {
           answer_key_source?: string | null;
           answer_key_worksheet_id?: string | null;
           autonomy_config?: Json | null;
+          calibration_enabled?: boolean;
+          calibration_profile?: Json | null;
+          calibration_samples?: string[];
           class_id?: string | null;
           completed_at?: string | null;
           created_at?: string;
@@ -170,6 +177,7 @@ export type Database = {
           grading_started_at?: string | null;
           id?: string;
           processed_submissions?: number;
+          scan_review_required?: boolean;
           status?: string;
           teacher_id: string;
           title: string;
@@ -183,6 +191,9 @@ export type Database = {
           answer_key_source?: string | null;
           answer_key_worksheet_id?: string | null;
           autonomy_config?: Json | null;
+          calibration_enabled?: boolean;
+          calibration_profile?: Json | null;
+          calibration_samples?: string[];
           class_id?: string | null;
           completed_at?: string | null;
           created_at?: string;
@@ -191,6 +202,7 @@ export type Database = {
           grading_started_at?: string | null;
           id?: string;
           processed_submissions?: number;
+          scan_review_required?: boolean;
           status?: string;
           teacher_id?: string;
           title?: string;
@@ -226,6 +238,29 @@ export type Database = {
             isOneToOne: false;
             referencedRelation: "worksheets";
             referencedColumns: ["id", "teacher_id"];
+          },
+        ];
+      };
+      grading_calibration_feedback: {
+        Row: {
+          answer_id: string;
+          comment: string;
+        };
+        Insert: {
+          answer_id: string;
+          comment?: string;
+        };
+        Update: {
+          answer_id?: string;
+          comment?: string;
+        };
+        Relationships: [
+          {
+            foreignKeyName: "grading_calibration_feedback_answer_id_fkey";
+            columns: ["answer_id"];
+            isOneToOne: true;
+            referencedRelation: "submission_answers";
+            referencedColumns: ["id"];
           },
         ];
       };
@@ -402,30 +437,45 @@ export type Database = {
       };
       submission_pages: {
         Row: {
+          content_hash: string | null;
           created_at: string;
           height: number | null;
           id: string;
           page_index: number;
+          perceptual_hash: string | null;
+          preview_storage_path: string | null;
+          scan_quality: Json | null;
+          scan_reviewed_at: string | null;
           storage_path: string;
           submission_id: string;
           upload_status: string;
           width: number | null;
         };
         Insert: {
+          content_hash?: string | null;
           created_at?: string;
           height?: number | null;
           id?: string;
           page_index: number;
+          perceptual_hash?: string | null;
+          preview_storage_path?: string | null;
+          scan_quality?: Json | null;
+          scan_reviewed_at?: string | null;
           storage_path: string;
           submission_id: string;
           upload_status?: string;
           width?: number | null;
         };
         Update: {
+          content_hash?: string | null;
           created_at?: string;
           height?: number | null;
           id?: string;
           page_index?: number;
+          perceptual_hash?: string | null;
+          preview_storage_path?: string | null;
+          scan_quality?: Json | null;
+          scan_reviewed_at?: string | null;
           storage_path?: string;
           submission_id?: string;
           upload_status?: string;
@@ -716,6 +766,10 @@ export type Database = {
       [_ in never]: never;
     };
     Functions: {
+      approve_grading_calibration: {
+        Args: { p_batch: string; p_profile: Json; p_revision: string };
+        Returns: undefined;
+      };
       claim_grading_submission: {
         Args: {
           p_batch: string;
@@ -737,6 +791,20 @@ export type Database = {
           p_acknowledged: boolean;
           p_batch: string;
           p_preferences: Json;
+          p_revision: string;
+        };
+        Returns: undefined;
+      };
+      configure_grading_calibration: {
+        Args: { p_batch: string; p_revision: string; p_samples: string[] };
+        Returns: undefined;
+      };
+      confirm_scan_review: {
+        Args: {
+          p_batch: string;
+          p_confirmed: boolean;
+          p_groups: Json;
+          p_reviews: Json;
           p_revision: string;
         };
         Returns: undefined;
@@ -800,6 +868,17 @@ export type Database = {
           p_kind: string;
           p_revision: string;
           p_scale: Json;
+        };
+        Returns: undefined;
+      };
+      save_calibration_feedback: {
+        Args: {
+          p_answer: string;
+          p_batch: string;
+          p_command: string;
+          p_comment: string;
+          p_revision: string;
+          p_score: number | null;
         };
         Returns: undefined;
       };

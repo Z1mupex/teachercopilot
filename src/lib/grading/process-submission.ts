@@ -8,6 +8,9 @@ import { AiRequestError } from "@/lib/ai/errors";
 import { gradingAiMessage } from "@/lib/grading/ai-errors";
 import type { Json } from "@/types/database";
 import { getBatchGradingSettings } from "@/lib/settings/repository";
+import { calibrationProfileSchema } from "@/lib/grading/calibration-schema";
+import { readPrivateImage } from "@/lib/grading/private-image";
+import sharp from "sharp";
 
 export async function processSubmission(
   teacherId: string,
@@ -34,27 +37,61 @@ export async function processSubmission(
   if (!attempt) throw new GradingError("Не удалось начать обработку.", 503);
   let saving = false;
   try {
-    const { data: page, error } = await client
+    const { data: pages, error } = await client
       .from("submission_pages")
-      .select("storage_path,submissions!inner(batch_id)")
+      .select("id,page_index,storage_path,submissions!inner(batch_id)")
       .eq("submission_id", submissionId)
       .eq("submissions.batch_id", batchId)
       .eq("upload_status", "stored")
-      .single();
-    if (error || !page)
+      .order("page_index");
+    if (error || !pages?.length || pages.length > 10)
       throw new GradingError("Оригинал работы недоступен.", 503);
-    const { data: blob, error: downloadError } = await client.storage
-      .from("submission-files")
-      .download(page.storage_path);
-    if (downloadError || !blob)
-      throw new GradingError("Не удалось загрузить оригинал работы.", 503);
-    if (blob.size > 6 * 1024 * 1024)
-      throw new GradingError("Страница превышает допустимый размер.", 413);
+    const images = [];
+    for (const page of pages) {
+      const bytes = await readPrivateImage(
+        client,
+        teacherId,
+        page.storage_path,
+      );
+      const compact = await sharp(bytes, { limitInputPixels: 40000000 })
+        .resize({
+          width: 2000,
+          height: 2000,
+          fit: "inside",
+          withoutEnlargement: true,
+        })
+        .jpeg({ quality: 85 })
+        .toBuffer();
+      images.push({ id: page.id, bytes: compact });
+    }
+    const context = await client
+      .from("grading_batches")
+      .select("calibration_enabled,calibration_samples,calibration_profile")
+      .eq("id", batchId)
+      .eq("teacher_id", teacherId)
+      .single();
+    if (context.error || !context.data)
+      throw new GradingError("Не удалось загрузить правила проверки.", 503);
+    const trial =
+      context.data.calibration_enabled &&
+      !context.data.calibration_profile &&
+      context.data.calibration_samples.includes(submissionId);
+    const settings = await getBatchGradingSettings(teacherId, batchId);
     const result = await recognizeAndGrade(
       teacherId,
-      Buffer.from(await blob.arrayBuffer()),
+      images,
       questions,
-      await getBatchGradingSettings(teacherId, batchId),
+      trial
+        ? {
+            ...settings,
+            auto_confirm: false,
+            auto_confirm_ai: false,
+            auto_confirm_open: false,
+          }
+        : settings,
+      context.data.calibration_profile
+        ? calibrationProfileSchema.parse(context.data.calibration_profile)
+        : null,
     );
     saving = true;
     const { error: saveError } = await client.rpc("finish_grading_submission", {
